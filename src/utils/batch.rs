@@ -357,8 +357,8 @@ pub fn process_relationships(
     let relationships_filename = format!("{}_{}_relationships.json", datetime, domain_format);
     let relationships_filepath = format!("{}/{}", common_args.path, relationships_filename);
     
-    // Write to file
-    std::fs::write(&relationships_filepath, relationship_data)?;
+    // Write to file - borrow the string instead of moving it
+    std::fs::write(&relationships_filepath, &relationship_data)?;
     info!("Cross-batch relationships written to {}", relationships_filepath);
     
     // Add to zip if requested
