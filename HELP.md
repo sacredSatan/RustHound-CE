@@ -264,6 +264,15 @@ rusthound-ce -d north.sevenkingdoms.local --ldaps -P 3636 -u 'jeor.mormont@north
 # Linux with batch processing to reduce memory usage (process objects in batches of 1000)
 rusthound-ce -d north.sevenkingdoms.local -u 'jeor.mormont@north.sevenkingdoms.local' -p '_L0ngCl@w_' -o /tmp/demo -z --batch-size 1000
 
+# IMPORTANT: Batch processing details
+# When using --batch-size parameter:
+# 1. Objects are processed in batches of the specified size (e.g., 1000)
+# 2. Each batch is written to a file with a batch number suffix (e.g., users_batch1.json)
+# 3. Memory is freed after each batch to maintain a low memory footprint
+# 4. Relationship data between objects across batches is preserved
+# 5. After all batches are processed, a relationships.json file is created
+# 6. BloodHound can use these files together to build a complete graph
+
 # Tips to redirect and append both standard output and standard error to a file > /tmp/rh_output 2>&1
 rusthound-ce -d north.sevenkingdoms.local --ldaps -u 'jeor.mormont@north.sevenkingdoms.local' -p '_L0ngCl@w_' -o /tmp/demo --fqdn-resolver > /tmp/rh_output 2>&1
 

@@ -182,8 +182,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let post_process_duration = post_process_start.elapsed();
         info!("Post-processing completed in {:.2} seconds", post_process_duration.as_secs_f64());
     } else {
-        info!("Skipping post-processing step as batch processing was used");
-        info!("All objects have already been processed and written to files");
+        info!("Skipping in-memory post-processing step as batch processing was used");
+        
+        // Instead, process and save relationships separately
+        let post_process_start = std::time::Instant::now();
+        
+        // Import the process_relationships function
+        use crate::utils::batch::process_relationships;
+        
+        // Process relationship data and write it to a special file
+        process_relationships(
+            &common_args,
+            &dn_sid,
+            &sid_type,
+            &fqdn_sid,
+        )?;
+        
+        let post_process_duration = post_process_start.elapsed();
+        info!("Relationship data processing completed in {:.2} seconds", post_process_duration.as_secs_f64());
+        info!("All objects have been processed and written to files");
     }
 
     // Running modules

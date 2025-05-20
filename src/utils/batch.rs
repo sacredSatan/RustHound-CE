@@ -20,6 +20,8 @@ use crate::objects::{
     enterpriseca::EnterpriseCA,
     certtemplate::CertTemplate,
     inssuancepolicie::IssuancePolicie,
+    trust::Trust,
+    common::LdapObject,
 };
 use crate::json::maker::common;
 
@@ -324,5 +326,52 @@ pub fn process_batch(
     info!("Batch {} completed: {} objects processed and written to disk", batch_number, total_objects.to_string().bold());
     info!("------------------------------------");
     
+    Ok(())
+}
+
+/// Process and write relationship data after all batches have been processed
+pub fn process_relationships(
+    common_args: &Options,
+    dn_sid: &HashMap<String, String>,
+    sid_type: &HashMap<String, String>,
+    fqdn_sid: &HashMap<String, String>,
+) -> Result<(), Box<dyn Error>> {
+    info!("Processing cross-batch relationships...");
+    
+    // Create the filename
+    let datetime = return_current_fulldate();
+    let domain_format = common_args.domain.replace(".", "_");
+    
+    // For zip output
+    let mut json_result: HashMap<String, String> = HashMap::new();
+    
+    // Create a relationships file
+    let relationship_data = format!(
+        "{{\"dn_sid\": {}, \"sid_type\": {}, \"fqdn_sid\": {}}}",
+        serde_json::to_string(dn_sid)?,
+        serde_json::to_string(sid_type)?,
+        serde_json::to_string(fqdn_sid)?
+    );
+    
+    // Write the relationships to a file
+    let relationships_filename = format!("{}_{}_relationships.json", datetime, domain_format);
+    let relationships_filepath = format!("{}/{}", common_args.path, relationships_filename);
+    
+    // Write to file
+    std::fs::write(&relationships_filepath, relationship_data)?;
+    info!("Cross-batch relationships written to {}", relationships_filepath);
+    
+    // Add to zip if requested
+    if common_args.zip {
+        json_result.insert("relationships".to_string(), relationship_data);
+        common::make_a_zip(
+            &datetime,
+            &format!("{}_relationships", domain_format),
+            &common_args.path,
+            &json_result,
+        );
+    }
+    
+    info!("Relationship processing complete! This data can be used with BloodHound to connect objects across batch files.");
     Ok(())
 } 

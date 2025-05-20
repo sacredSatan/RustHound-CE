@@ -7,7 +7,16 @@
 
 ### Summary
 
-Added a new `--batch-size` parameter that allows processing objects in batches to reduce memory usage. This is especially useful for large Active Directory environments where keeping all data in memory until the end could cause issues. When enabled, RustHound-CE will write data to files after each batch is processed and then free the memory.
+Added a new `--batch-size` parameter that allows processing objects in batches to reduce memory usage. This is especially useful for large Active Directory environments where keeping all data in memory until the end could cause issues.
+
+Key features:
+- Process AD objects in configurable batch sizes
+- Write data to files after each batch is processed, freeing memory
+- Preserve relationship data between objects in different batches
+- Generate a separate relationships file after all batches are complete
+- Enable BloodHound to build a complete graph from all batch files
+
+When batch processing is enabled, RustHound-CE will maintain low memory usage even with extremely large Active Directory environments, while still preserving all relationship data needed for accurate attack path analysis.
 
 ## v2.3.4
 

@@ -66,6 +66,12 @@ For large Active Directory environments, you can use batch processing to reduce 
 rusthound-ce -d DOMAIN.LOCAL -u USERNAME@DOMAIN.LOCAL -z --batch-size 1000
 ```
 
+When using batch processing:
+- Objects are processed in batches and written to files with batch number suffixes
+- Memory is freed after each batch is written
+- Relationship data is preserved and written to a separate file after all batches are done
+- BloodHound can still build a complete graph across all batches
+
 More information and examples with how to compile RustHound-CE or how to use RustHound-CE can be found directly on the [help page](HELP.md).
 
 # Special thanks to 
