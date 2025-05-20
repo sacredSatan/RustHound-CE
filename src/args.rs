@@ -27,6 +27,7 @@ pub struct Options {
     pub zip: bool,
     pub verbose: log::LevelFilter,
     pub ldap_filter: String,
+    pub batch_size: Option<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -154,6 +155,12 @@ fn cli() -> Command {
             .action(ArgAction::SetTrue)
             .global(false)
         )
+        .arg(Arg::new("batch-size")
+            .long("batch-size")
+            .help("Process objects in batches of this size to save memory. When specified, writes results to files after each batch")
+            .required(false)
+            .value_parser(value_parser!(usize))
+        )
         .next_help_heading("OPTIONAL MODULES")
         .arg(Arg::new("fqdn-resolver")
             .long("fqdn-resolver")
@@ -206,6 +213,7 @@ pub fn extract_args() -> Options {
          _          => CollectionMethod::All,
     };
     let ldap_filter = matches.get_one::<String>("ldap-filter").map(|s| s.as_str()).unwrap_or("(objectClass=*)");
+    let batch_size = matches.get_one::<usize>("batch-size").map(|s| s.to_owned());
 
     // Return all
     Options {
@@ -225,6 +233,7 @@ pub fn extract_args() -> Options {
         zip: z,
         verbose: v,
         ldap_filter: ldap_filter.to_string(),
+        batch_size: batch_size,
     }
 }
 
@@ -283,6 +292,7 @@ pub fn auto_args() -> Options {
         kerberos: true,
         zip: true,
         verbose: log::LevelFilter::Info,
-        ldap_filter: "(objectClass=*)".to_string()
+        ldap_filter: "(objectClass=*)".to_string(),
+        batch_size: None,
     }
 }

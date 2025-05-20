@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.3.5
+
+### Date
+`2025/03/15`
+
+### Summary
+
+Added a new `--batch-size` parameter that allows processing objects in batches to reduce memory usage. This is especially useful for large Active Directory environments where keeping all data in memory until the end could cause issues. When enabled, RustHound-CE will write data to files after each batch is processed and then free the memory.
+
 ## v2.3.4
 
 ### Date

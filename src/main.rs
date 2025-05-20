@@ -163,24 +163,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
     ).await?;
 
     // Add all in json files
-    match make_result(
-        &common_args,
-        vec_users,
-        vec_groups,
-        vec_computers,
-        vec_ous,
-        vec_domains,
-        vec_gpos,
-        vec_containers,
-        vec_ntauthstores,
-        vec_aiacas,
-        vec_rootcas,
-        vec_enterprisecas,
-        vec_certtemplates,
-        vec_issuancepolicies,
-    ) {
-        Ok(_res) => trace!("Making json/zip files finished!"),
-        Err(err) => error!("Error. Reason: {err}")
+    // Only do final result writing if we're not using batching
+    if common_args.batch_size.is_none() {
+        match make_result(
+            &common_args,
+            vec_users,
+            vec_groups,
+            vec_computers,
+            vec_ous,
+            vec_domains,
+            vec_gpos,
+            vec_containers,
+            vec_ntauthstores,
+            vec_aiacas,
+            vec_rootcas,
+            vec_enterprisecas,
+            vec_certtemplates,
+            vec_issuancepolicies,
+        ) {
+            Ok(_res) => trace!("Making json/zip files finished!"),
+            Err(err) => error!("Error. Reason: {err}")
+        }
+    } else {
+        info!("Batched processing completed. All data has been written to files.");
     }
 
     // End banner

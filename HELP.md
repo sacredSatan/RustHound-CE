@@ -154,7 +154,7 @@ sudo UNATTENDED=yes OSX_VERSION_MIN=10.7 /usr/local/bin/osxcross/build.sh
 sudo chmod 775 /usr/local/bin/osxcross/ -R
 export PATH="/usr/local/bin/osxcross/target/bin:$PATH"
 
-# Cargo needs to be told to use the correct linker for the x86_64-apple-darwin target, so add the following to your project’s .cargo/config file:
+# Cargo needs to be told to use the correct linker for the x86_64-apple-darwin target, so add the following to your project's .cargo/config file:
 grep 'target.x86_64-apple-darwin' ~/.cargo/config || echo "[target.x86_64-apple-darwin]" >> ~/.cargo/config
 grep 'linker = "x86_64-apple-darwin14-clang"' ~/.cargo/config || echo 'linker = "x86_64-apple-darwin14-clang"' >> ~/.cargo/config
 grep 'ar = "x86_64-apple-darwin14-clang"' ~/.cargo/config || echo 'ar = "x86_64-apple-darwin14-clang"' >> ~/.cargo/config
@@ -237,6 +237,8 @@ OPTIONAL FLAGS:
           Use TCP instead of UDP for DNS queries
   -z, --zip
           Compress the JSON files into a zip archive
+      --batch-size <batch_size>
+          Process objects in batches of this size to save memory. When specified, writes results to files after each batch
 
 OPTIONAL MODULES:
       --fqdn-resolver  Use fqdn-resolver module to get computers IP address
@@ -258,6 +260,9 @@ rusthound-ce -d north.sevenkingdoms.local -i 192.168.56.11 -u 'jeor.mormont@nort
 rusthound-ce -d north.sevenkingdoms.local --ldaps -u 'jeor.mormont@north.sevenkingdoms.local' -p '_L0ngCl@w_' -o /tmp/demo -z 
 # Linux with username:password and ldaps and custom port
 rusthound-ce -d north.sevenkingdoms.local --ldaps -P 3636 -u 'jeor.mormont@north.sevenkingdoms.local' -p '_L0ngCl@w_' -o /tmp/demo -z 
+
+# Linux with batch processing to reduce memory usage (process objects in batches of 1000)
+rusthound-ce -d north.sevenkingdoms.local -u 'jeor.mormont@north.sevenkingdoms.local' -p '_L0ngCl@w_' -o /tmp/demo -z --batch-size 1000
 
 # Tips to redirect and append both standard output and standard error to a file > /tmp/rh_output 2>&1
 rusthound-ce -d north.sevenkingdoms.local --ldaps -u 'jeor.mormont@north.sevenkingdoms.local' -p '_L0ngCl@w_' -o /tmp/demo --fqdn-resolver > /tmp/rh_output 2>&1

@@ -59,6 +59,13 @@ Here's an example of a command to collect domain objects and obtain the zip arch
 rusthound-ce -d DOMAIN.LOCAL -u USERNAME@DOMAIN.LOCAL -z
 ```
 
+For large Active Directory environments, you can use batch processing to reduce memory usage:
+
+```bash
+# Process objects in batches of 1000, writing to files after each batch
+rusthound-ce -d DOMAIN.LOCAL -u USERNAME@DOMAIN.LOCAL -z --batch-size 1000
+```
+
 More information and examples with how to compile RustHound-CE or how to use RustHound-CE can be found directly on the [help page](HELP.md).
 
 # Special thanks to 

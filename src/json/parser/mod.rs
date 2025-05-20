@@ -23,10 +23,11 @@ use crate::objects::{
 };
 use std::convert::TryInto;
 
-use log::info;
+use log::{info, trace};
 use crate::args::Options;
 use crate::banner::progress_bar;
 use crate::enums::ldaptype::*;
+use crate::utils::batch::process_batch;
 // use crate::modules::adcs::parser::{parse_adcs_ca,parse_adcs_template};
 
 /// Function to get type for object by object
@@ -58,13 +59,23 @@ pub fn parse_result_type(
     // Domain name
     let domain = &common_args.domain;
 
+    // Check if batching is enabled
+    let use_batching = common_args.batch_size.is_some();
+    let batch_size = common_args.batch_size.unwrap_or(usize::MAX);
+    
     // Needed for progress bar stats
     let pb = ProgressBar::new(1);
     let mut count = 0;
     let total = result.len();
     let mut domain_sid: String = "DOMAIN_SID".to_owned();
+    let mut batch_number = 1;
+    let mut objects_in_batch = 0;
 
     info!("Starting the LDAP objects parsing...");
+    if use_batching {
+        info!("Batch processing enabled with batch size of {}", batch_size);
+    }
+    
     for entry in result {
         // Start parsing with Type matching
         let cloneresult = entry.clone();
@@ -81,6 +92,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_users.push(user);
+                objects_in_batch += 1;
             }
             Type::Group => {
                 let mut group = Group::new();
@@ -92,6 +104,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_groups.push(group);
+                objects_in_batch += 1;
             }
             Type::Computer => {
                 let mut computer = Computer::new();
@@ -105,6 +118,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_computers.push(computer);
+                objects_in_batch += 1;
             }
             Type::Ou => {
                 let mut ou = Ou::new();
@@ -116,6 +130,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_ous.push(ou);
+                objects_in_batch += 1;
             }
             Type::Domain => {
                 let mut domain_object = Domain::new();
@@ -127,6 +142,7 @@ pub fn parse_result_type(
                 )?;
                 domain_sid = domain_sid_from_domain;
                 vec_domains.push(domain_object);
+                objects_in_batch += 1;
             }
             Type::Gpo => {
                 let mut  gpo = Gpo::new();
@@ -138,6 +154,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_gpos.push(gpo);
+                objects_in_batch += 1;
             }
             Type::ForeignSecurityPrincipal => {
                 let mut security_principal = Fsp::new();
@@ -148,6 +165,7 @@ pub fn parse_result_type(
                     sid_type,
                 )?;
                 vec_fsps.push(security_principal);
+                objects_in_batch += 1;
             }
             Type::Container => {
                 let re = Regex::new(r"[0-9a-z-A-Z]{1,}-[0-9a-z-A-Z]{1,}-[0-9a-z-A-Z]{1,}-[0-9a-z-A-Z]{1,}")?;
@@ -172,6 +190,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_containers.push(container);
+                objects_in_batch += 1;
             }
             Type::Trust => {
                 let mut trust = Trust::new();
@@ -180,6 +199,7 @@ pub fn parse_result_type(
                     domain
                 )?;
                 vec_trusts.push(trust);
+                objects_in_batch += 1;
             }
             Type::NtAutStore => {
                 let mut nt_auth_store = NtAuthStore::new();
@@ -191,6 +211,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_ntauthstore.push(nt_auth_store); 
+                objects_in_batch += 1;
             }
             Type::AIACA => {
                 let mut aiaca = AIACA::new();
@@ -202,6 +223,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_aiacas.push(aiaca); 
+                objects_in_batch += 1;
             }
             Type::RootCA => {
                 let mut root_ca = RootCA::new();
@@ -213,6 +235,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_rootcas.push(root_ca); 
+                objects_in_batch += 1;
             }
             Type::EnterpriseCA => {
                 let mut enterprise_ca = EnterpriseCA::new();
@@ -224,6 +247,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_enterprisecas.push(enterprise_ca); 
+                objects_in_batch += 1;
             }
             Type::CertTemplate => {
                 let mut cert_template = CertTemplate::new();
@@ -235,6 +259,7 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_certtemplates.push(cert_template);
+                objects_in_batch += 1;
             }
             Type::IssuancePolicie => {
                 let mut issuance_policie = IssuancePolicie::new();
@@ -246,18 +271,66 @@ pub fn parse_result_type(
                     &domain_sid
                 )?;
                 vec_issuancepolicies.push(issuance_policie);
+                objects_in_batch += 1;
             }
             Type::Unknown => {
-                let _unknown = parse_unknown(cloneresult, domain);
+                trace!("Unknown object type");
+                //let result_dn = cloneresult.dn.to_uppercase();
+                //let _unknown_json = parse_unknown(cloneresult, domain);
             }
         }
-        // Manage progress bar
-        // Pourcentage (%) = 100 x Valeur partielle/Valeur totale
-		count += 1;
-        let pourcentage = 100 * count / total;
-        progress_bar(pb.to_owned(),"Parsing LDAP objects".to_string(),pourcentage.try_into()?,"%".to_string());
+        // Progress Bar
+        count += 1;
+        pb.set_length(total as u64);
+        pb.set_position(count as u64);
+        progress_bar(pb.clone(), "Parsing LDAP objects".to_string(), (100 * count / total).try_into()?, "%".to_string());
+        
+        // Process batch if needed
+        if use_batching && objects_in_batch >= batch_size {
+            process_batch(
+                common_args,
+                vec_users,
+                vec_groups,
+                vec_computers,
+                vec_ous,
+                vec_domains,
+                vec_gpos,
+                vec_containers,
+                vec_ntauthstore,
+                vec_aiacas,
+                vec_rootcas,
+                vec_enterprisecas,
+                vec_certtemplates,
+                vec_issuancepolicies,
+                batch_number,
+            )?;
+            
+            // Reset batch counter and increment batch number
+            objects_in_batch = 0;
+            batch_number += 1;
+        }
     }
-    pb.finish_and_clear();
-    info!("Parsing LDAP objects finished!");
+    
+    // Process any remaining objects in a final batch if batching is enabled
+    if use_batching && objects_in_batch > 0 {
+        process_batch(
+            common_args,
+            vec_users,
+            vec_groups,
+            vec_computers,
+            vec_ous,
+            vec_domains,
+            vec_gpos,
+            vec_containers,
+            vec_ntauthstore,
+            vec_aiacas,
+            vec_rootcas,
+            vec_enterprisecas,
+            vec_certtemplates,
+            vec_issuancepolicies,
+            batch_number,
+        )?;
+    }
+    
     Ok(())
 }
