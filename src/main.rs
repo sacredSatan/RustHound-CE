@@ -8,17 +8,17 @@ pub mod utils;
 pub mod banner;
 pub mod ldap;
 
-use log::{info,trace,error};
+use log::{info, trace, error, debug};
 use env_logger::Builder;
 use std::collections::HashMap;
 use std::error::Error;
 
 #[cfg(not(feature = "noargs"))]
-use args::{Options,extract_args};
+use args::{Options, extract_args};
 #[cfg(feature = "noargs")]
 use args::auto_args;
 
-use banner::{print_banner,print_end_banner};
+use banner::{print_banner, print_end_banner};
 use ldap::ldap_search;
 use modules::run_modules;
 use json::{
@@ -65,8 +65,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Get verbose level
     info!("Verbosity level: {:?}", common_args.verbose);
     info!("Collection method: {:?}", common_args.collection_method);
+    
+    // Log batching configuration
+    if let Some(batch_size) = common_args.batch_size {
+        info!("Batch processing enabled with size: {}", batch_size);
+        info!("Data will be written to disk after every {} objects", batch_size);
+    } else {
+        info!("Batch processing disabled - all objects will be kept in memory until processing completes");
+    }
 
     // LDAP request to get all informations in result
+    info!("Starting LDAP search...");
     let result = ldap_search(
         common_args.ldaps,
         &common_args.ip,
@@ -78,6 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         common_args.kerberos,
         &common_args.ldap_filter
     ).await?;
+    info!("LDAP search completed. Retrieved {} objects to process", result.len());
 
     // Vector for content all
     let mut vec_users:              Vec<User>            = Vec::new();
@@ -96,6 +106,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut vec_certtemplates:      Vec<CertTemplate>    = Vec::new();
     let mut vec_issuancepolicies:   Vec<IssuancePolicie> = Vec::new();
 
+    debug!("Initialized empty vectors for all object types");
+
     // Hashmap to link DN to SID
     let mut dn_sid: HashMap<String, String> = HashMap::new();
     // Hashmap to link DN to Type
@@ -107,6 +119,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Analyze object by object 
     // Get type and parse it to get values
+    info!("Starting object parsing and processing...");
+    let parse_start_time = std::time::Instant::now();
+    
     parse_result_type(
         &common_args,
         result,
@@ -131,40 +146,65 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &mut fqdn_ip,
     )?;
     
+    let parse_duration = parse_start_time.elapsed();
+    info!("Object parsing completed in {:.2} seconds", parse_duration.as_secs_f64());
+    
     // Functions to replace and add missing values
-    check_all_result(
-        &common_args,
-        &mut vec_users,
-        &mut vec_groups,
-        &mut vec_computers,
-        &mut vec_ous,
-        &mut vec_domains,
-        &mut vec_gpos,
-        &mut vec_fsps,
-        &mut vec_containers,
-        &mut vec_trusts,
-        &mut vec_ntauthstores,
-        &mut vec_aiacas,
-        &mut vec_rootcas,
-        &mut vec_enterprisecas,
-        &mut vec_certtemplates,
-        &mut vec_issuancepolicies,
-        &mut dn_sid,
-        &mut sid_type,
-        &mut fqdn_sid,
-        &mut fqdn_ip,
-    )?;
+    if common_args.batch_size.is_none() {
+        // Only need to do post-processing if we're not using batching
+        // (otherwise vectors will be empty at this point)
+        info!("Running post-processing to add missing values and relationships...");
+        let post_process_start = std::time::Instant::now();
+        
+        check_all_result(
+            &common_args,
+            &mut vec_users,
+            &mut vec_groups,
+            &mut vec_computers,
+            &mut vec_ous,
+            &mut vec_domains,
+            &mut vec_gpos,
+            &mut vec_fsps,
+            &mut vec_containers,
+            &mut vec_trusts,
+            &mut vec_ntauthstores,
+            &mut vec_aiacas,
+            &mut vec_rootcas,
+            &mut vec_enterprisecas,
+            &mut vec_certtemplates,
+            &mut vec_issuancepolicies,
+            &mut dn_sid,
+            &mut sid_type,
+            &mut fqdn_sid,
+            &mut fqdn_ip,
+        )?;
+        
+        let post_process_duration = post_process_start.elapsed();
+        info!("Post-processing completed in {:.2} seconds", post_process_duration.as_secs_f64());
+    } else {
+        info!("Skipping post-processing step as batch processing was used");
+        info!("All objects have already been processed and written to files");
+    }
 
     // Running modules
+    info!("Running additional modules...");
+    let modules_start = std::time::Instant::now();
+    
     run_modules(
         &common_args,
         &mut fqdn_ip,
         &mut vec_computers,
     ).await?;
+    
+    let modules_duration = modules_start.elapsed();
+    info!("Module execution completed in {:.2} seconds", modules_duration.as_secs_f64());
 
     // Add all in json files
     // Only do final result writing if we're not using batching
     if common_args.batch_size.is_none() {
+        info!("Writing all collected data to output files...");
+        let write_start = std::time::Instant::now();
+        
         match make_result(
             &common_args,
             vec_users,
@@ -181,11 +221,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
             vec_certtemplates,
             vec_issuancepolicies,
         ) {
-            Ok(_res) => trace!("Making json/zip files finished!"),
-            Err(err) => error!("Error. Reason: {err}")
+            Ok(_res) => {
+                let write_duration = write_start.elapsed();
+                info!("Writing to files completed in {:.2} seconds", write_duration.as_secs_f64());
+                trace!("Making json/zip files finished!");
+            },
+            Err(err) => error!("Error writing output files. Reason: {err}")
         }
     } else {
-        info!("Batched processing completed. All data has been written to files.");
+        // Calculate summary stats about all batches
+        info!("Batched processing summary:");
+        if let Some(batch_size) = common_args.batch_size {
+            info!("All data has been processed in batches of {} objects", batch_size);
+            info!("All batches have been written to files with the batch number suffix");
+            info!("No additional file writing needed");
+        }
     }
 
     // End banner

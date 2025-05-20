@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::error::Error;
-use log::{info, warn};
+use log::{info, warn, debug};
 use colored::Colorize;
+use std::mem;
 
 use crate::args::Options;
 use crate::utils::date::return_current_fulldate;
@@ -21,6 +22,42 @@ use crate::objects::{
     inssuancepolicie::IssuancePolicie,
 };
 use crate::json::maker::common;
+
+/// Get a rough estimate of memory usage by adding up the vector capacities
+fn estimate_memory_usage(
+    vec_users: &Vec<User>,
+    vec_groups: &Vec<Group>,
+    vec_computers: &Vec<Computer>,
+    vec_ous: &Vec<Ou>,
+    vec_domains: &Vec<Domain>,
+    vec_gpos: &Vec<Gpo>,
+    vec_containers: &Vec<Container>,
+    vec_ntauthstores: &Vec<NtAuthStore>,
+    vec_aiacas: &Vec<AIACA>,
+    vec_rootcas: &Vec<RootCA>,
+    vec_enterprisecas: &Vec<EnterpriseCA>,
+    vec_certtemplates: &Vec<CertTemplate>,
+    vec_issuancepolicies: &Vec<IssuancePolicie>,
+) -> usize {
+    // This is a rough estimate using the vector capacities and an approximation of object sizes
+    let user_size = std::mem::size_of::<User>() * vec_users.len();
+    let group_size = std::mem::size_of::<Group>() * vec_groups.len();
+    let computer_size = std::mem::size_of::<Computer>() * vec_computers.len();
+    let ou_size = std::mem::size_of::<Ou>() * vec_ous.len();
+    let domain_size = std::mem::size_of::<Domain>() * vec_domains.len();
+    let gpo_size = std::mem::size_of::<Gpo>() * vec_gpos.len();
+    let container_size = std::mem::size_of::<Container>() * vec_containers.len();
+    let ntauthstore_size = std::mem::size_of::<NtAuthStore>() * vec_ntauthstores.len();
+    let aiaca_size = std::mem::size_of::<AIACA>() * vec_aiacas.len();
+    let rootca_size = std::mem::size_of::<RootCA>() * vec_rootcas.len();
+    let enterpriseca_size = std::mem::size_of::<EnterpriseCA>() * vec_enterprisecas.len();
+    let certtemplate_size = std::mem::size_of::<CertTemplate>() * vec_certtemplates.len();
+    let issuancepolicy_size = std::mem::size_of::<IssuancePolicie>() * vec_issuancepolicies.len();
+    
+    user_size + group_size + computer_size + ou_size + domain_size + 
+    gpo_size + container_size + ntauthstore_size + aiaca_size + 
+    rootca_size + enterpriseca_size + certtemplate_size + issuancepolicy_size
+}
 
 /// Process and write a batch of data to files, then clear the vectors
 pub fn process_batch(
@@ -51,14 +88,6 @@ pub fn process_batch(
 
     info!("Processing batch {} and writing to files...", batch_number);
     
-    // Current date and time
-    let datetime = return_current_fulldate();
-    // Domain format for filename
-    let domain_format = common_args.domain.replace(".", "_");
-    
-    // For zip output
-    let mut json_result: HashMap<String, String> = HashMap::new();
-    
     // Get counts before emptying
     let users_count = vec_users.len();
     let groups_count = vec_groups.len();
@@ -74,11 +103,50 @@ pub fn process_batch(
     let certtemplates_count = vec_certtemplates.len();
     let issuancepolicies_count = vec_issuancepolicies.len();
     
+    // Calculate total objects and estimated memory
+    let total_objects = users_count + groups_count + computers_count + ous_count + 
+                        domains_count + gpos_count + containers_count + ntauthstores_count + 
+                        aiacas_count + rootcas_count + enterprisecas_count + 
+                        certtemplates_count + issuancepolicies_count;
+    
+    let memory_before = estimate_memory_usage(
+        vec_users, vec_groups, vec_computers, vec_ous, vec_domains, vec_gpos, 
+        vec_containers, vec_ntauthstores, vec_aiacas, vec_rootcas, 
+        vec_enterprisecas, vec_certtemplates, vec_issuancepolicies
+    );
+    
+    // Log detailed object counts
+    info!("---------- Batch {} Summary ----------", batch_number);
+    info!("Total objects: {}", total_objects.to_string().bold());
+    debug!("Users: {}", users_count);
+    debug!("Groups: {}", groups_count);
+    debug!("Computers: {}", computers_count);
+    debug!("OUs: {}", ous_count);
+    debug!("Domains: {}", domains_count);
+    debug!("GPOs: {}", gpos_count);
+    debug!("Containers: {}", containers_count);
+    debug!("NtAuthStores: {}", ntauthstores_count);
+    debug!("AIACAs: {}", aiacas_count);
+    debug!("RootCAs: {}", rootcas_count);
+    debug!("EnterpriseCAs: {}", enterprisecas_count);
+    debug!("CertTemplates: {}", certtemplates_count);
+    debug!("IssuancePolicies: {}", issuancepolicies_count);
+    info!("Estimated memory usage: ~{} MB", (memory_before / 1024 / 1024).to_string().bold());
+    
+    // Current date and time
+    let datetime = return_current_fulldate();
+    // Domain format for filename
+    let domain_format = common_args.domain.replace(".", "_");
+    
+    // For zip output
+    let mut json_result: HashMap<String, String> = HashMap::new();
+    
     // Add batch number to filenames
     let batch_suffix = format!("_batch{}", batch_number);
     
     // Add each type to files with a batch number suffix
     if !vec_users.is_empty() {
+        info!("Writing {} users to file", users_count);
         common::add_file(
             &datetime,
             format!("users{}", batch_suffix),
@@ -90,6 +158,7 @@ pub fn process_batch(
     }
     
     if !vec_groups.is_empty() {
+        info!("Writing {} groups to file", groups_count);
         common::add_file(
             &datetime,
             format!("groups{}", batch_suffix),
@@ -101,6 +170,7 @@ pub fn process_batch(
     }
     
     if !vec_computers.is_empty() {
+        info!("Writing {} computers to file", computers_count);
         common::add_file(
             &datetime,
             format!("computers{}", batch_suffix),
@@ -112,6 +182,7 @@ pub fn process_batch(
     }
     
     if !vec_ous.is_empty() {
+        info!("Writing {} OUs to file", ous_count);
         common::add_file(
             &datetime,
             format!("ous{}", batch_suffix),
@@ -123,6 +194,7 @@ pub fn process_batch(
     }
     
     if !vec_domains.is_empty() {
+        info!("Writing {} domains to file", domains_count);
         common::add_file(
             &datetime,
             format!("domains{}", batch_suffix),
@@ -134,6 +206,7 @@ pub fn process_batch(
     }
     
     if !vec_gpos.is_empty() {
+        info!("Writing {} GPOs to file", gpos_count);
         common::add_file(
             &datetime,
             format!("gpos{}", batch_suffix),
@@ -145,6 +218,7 @@ pub fn process_batch(
     }
     
     if !vec_containers.is_empty() {
+        info!("Writing {} containers to file", containers_count);
         common::add_file(
             &datetime,
             format!("containers{}", batch_suffix),
@@ -156,6 +230,7 @@ pub fn process_batch(
     }
     
     if !vec_ntauthstores.is_empty() {
+        info!("Writing {} NtAuthStores to file", ntauthstores_count);
         common::add_file(
             &datetime,
             format!("ntauthstores{}", batch_suffix),
@@ -167,6 +242,7 @@ pub fn process_batch(
     }
     
     if !vec_aiacas.is_empty() {
+        info!("Writing {} AIACAs to file", aiacas_count);
         common::add_file(
             &datetime,
             format!("aiacas{}", batch_suffix),
@@ -178,6 +254,7 @@ pub fn process_batch(
     }
     
     if !vec_rootcas.is_empty() {
+        info!("Writing {} RootCAs to file", rootcas_count);
         common::add_file(
             &datetime,
             format!("rootcas{}", batch_suffix),
@@ -189,6 +266,7 @@ pub fn process_batch(
     }
     
     if !vec_enterprisecas.is_empty() {
+        info!("Writing {} EnterpriseCAs to file", enterprisecas_count);
         common::add_file(
             &datetime,
             format!("enterprisecas{}", batch_suffix),
@@ -200,6 +278,7 @@ pub fn process_batch(
     }
     
     if !vec_certtemplates.is_empty() {
+        info!("Writing {} CertTemplates to file", certtemplates_count);
         common::add_file(
             &datetime,
             format!("certtemplates{}", batch_suffix),
@@ -211,6 +290,7 @@ pub fn process_batch(
     }
     
     if !vec_issuancepolicies.is_empty() {
+        info!("Writing {} IssuancePolicies to file", issuancepolicies_count);
         common::add_file(
             &datetime,
             format!("issuancepolicies{}", batch_suffix),
@@ -223,6 +303,7 @@ pub fn process_batch(
     
     // Create a zip file if requested
     if common_args.zip {
+        info!("Creating zip archive for batch {}", batch_number);
         common::make_a_zip(
             &datetime,
             &format!("{}{}", domain_format, batch_suffix),
@@ -231,13 +312,17 @@ pub fn process_batch(
         );
     }
     
-    // Log summary
-    let total_objects = users_count + groups_count + computers_count + ous_count + 
-                        domains_count + gpos_count + containers_count + ntauthstores_count + 
-                        aiacas_count + rootcas_count + enterprisecas_count + 
-                        certtemplates_count + issuancepolicies_count;
+    // Calculate memory after processing
+    let memory_after = estimate_memory_usage(
+        vec_users, vec_groups, vec_computers, vec_ous, vec_domains, vec_gpos, 
+        vec_containers, vec_ntauthstores, vec_aiacas, vec_rootcas, 
+        vec_enterprisecas, vec_certtemplates, vec_issuancepolicies
+    );
     
+    // Memory usage should be near zero after taking the vectors
+    info!("Estimated memory freed: ~{} MB", ((memory_before - memory_after) / 1024 / 1024).to_string().bold());
     info!("Batch {} completed: {} objects processed and written to disk", batch_number, total_objects.to_string().bold());
+    info!("------------------------------------");
     
     Ok(())
 } 
