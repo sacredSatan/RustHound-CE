@@ -284,6 +284,17 @@ func getLastActiveTime(user ADUser) int64 {
 	return user.Properties.LastLogon
 }
 
+// GetCategorySummary returns a map with counts of findings by category
+func GetCategorySummary(findings []SecurityFinding) map[string]int {
+	categoryCounts := make(map[string]int)
+
+	for _, finding := range findings {
+		categoryCounts[finding.Type]++
+	}
+
+	return categoryCounts
+}
+
 // SaveSummaryToFile saves the summary to a JSON file
 func SaveSummaryToFile(summary *Summary, outputPath string) error {
 	jsonData, err := json.MarshalIndent(summary, "", "  ")

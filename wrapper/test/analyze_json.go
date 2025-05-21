@@ -149,6 +149,18 @@ func main() {
 			fmt.Printf("%d) [%s] %s: %s (Severity: %s)\n",
 				i+1, finding.Type, finding.Username, finding.Description, finding.Severity)
 		}
+
+		// Generate and print category summary
+		categoryCounts := make(map[string]int)
+		for _, finding := range summary.SecurityFindings {
+			categoryCounts[finding.Type]++
+		}
+
+		fmt.Printf("\nFindings summary by category:\n")
+		for category, count := range categoryCounts {
+			fmt.Printf("- %s: %d\n", category, count)
+		}
+		fmt.Printf("\nTotal security issues found: %d\n", len(summary.SecurityFindings))
 	}
 
 	// Save results to JSON file if requested

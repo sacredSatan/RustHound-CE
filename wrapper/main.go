@@ -208,6 +208,18 @@ func main() {
 			fmt.Printf("- %s: %s\n", finding.Type, finding.Description)
 		}
 
+		// Print findings summary by category
+		categoryCounts := GetCategorySummary(summary.SecurityFindings)
+		fmt.Printf("\nFindings summary by category:\n")
+		if len(categoryCounts) == 0 {
+			fmt.Println("No security issues found.")
+		} else {
+			for category, count := range categoryCounts {
+				fmt.Printf("- %s: %d\n", category, count)
+			}
+			fmt.Printf("\nTotal security issues found: %d\n", len(summary.SecurityFindings))
+		}
+
 		// Compress output files and clean up if enabled
 		if *compressOutput {
 			fmt.Println("\nCompressing output files and cleaning up...")
