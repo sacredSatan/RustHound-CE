@@ -22,36 +22,50 @@ func getAvailableDiskSpaceMB(path string) (uint64, error) {
 }
 
 // getProcessMemoryUsageMB returns the memory usage of the process in MB
-func getProcessMemoryUsageMB(pid int) (uint64, error) {
+func getProcessMemoryUsageMB(pid int, debug bool) (uint64, error) {
 	// Linux-specific implementation using /proc filesystem
 	procFile := fmt.Sprintf("/proc/%d/status", pid)
-	fmt.Fprintf(os.Stderr, "DEBUG: Reading memory info from %s\n", procFile)
+	if debug {
+		fmt.Fprintf(os.Stderr, "DEBUG: Reading memory info from %s\n", procFile)
+	}
 
 	data, err := os.ReadFile(procFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "DEBUG: Error reading proc file: %v\n", err)
+		if debug {
+			fmt.Fprintf(os.Stderr, "DEBUG: Error reading proc file: %v\n", err)
+		}
 		return 0, err
 	}
 
 	// Parse the file to find memory usage (VmRSS)
 	lines := strings.Split(string(data), "\n")
-	fmt.Fprintf(os.Stderr, "DEBUG: Proc file contains %d lines\n", len(lines))
+	if debug {
+		fmt.Fprintf(os.Stderr, "DEBUG: Proc file contains %d lines\n", len(lines))
+	}
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "VmRSS:") {
-			fmt.Fprintf(os.Stderr, "DEBUG: Found VmRSS line: %s\n", line)
+			if debug {
+				fmt.Fprintf(os.Stderr, "DEBUG: Found VmRSS line: %s\n", line)
+			}
 			var memKB uint64
 			_, err := fmt.Sscanf(strings.TrimSpace(strings.TrimPrefix(line, "VmRSS:")), "%d kB", &memKB)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "DEBUG: Failed to parse memory usage: %v\n", err)
+				if debug {
+					fmt.Fprintf(os.Stderr, "DEBUG: Failed to parse memory usage: %v\n", err)
+				}
 				return 0, fmt.Errorf("failed to parse memory usage: %v", err)
 			}
-			fmt.Fprintf(os.Stderr, "DEBUG: Calculated memory usage: %d KB (%d MB)\n", memKB, memKB/1024)
+			if debug {
+				fmt.Fprintf(os.Stderr, "DEBUG: Calculated memory usage: %d KB (%d MB)\n", memKB, memKB/1024)
+			}
 			return memKB / 1024, nil // Convert KB to MB
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "DEBUG: Couldn't find VmRSS in proc file\n")
+	if debug {
+		fmt.Fprintf(os.Stderr, "DEBUG: Couldn't find VmRSS in proc file\n")
+	}
 	return 0, fmt.Errorf("couldn't find memory usage information")
 }
 
@@ -78,13 +92,17 @@ func getSystemMemoryInfoMB() (uint64, uint64, error) {
 }
 
 // listProcessTree lists the process tree starting at the given PID
-func listProcessTree(pid int) {
-	fmt.Fprintf(os.Stderr, "DEBUG: Listing process tree for PID %d\n", pid)
+func listProcessTree(pid int, debug bool) {
+	if debug {
+		fmt.Fprintf(os.Stderr, "DEBUG: Listing process tree for PID %d\n", pid)
+	}
 
 	// Check if process exists
 	_, err := os.FindProcess(pid)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "DEBUG: Process %d not found: %v\n", pid, err)
+		if debug {
+			fmt.Fprintf(os.Stderr, "DEBUG: Process %d not found: %v\n", pid, err)
+		}
 		return
 	}
 
@@ -92,23 +110,27 @@ func listProcessTree(pid int) {
 	cmd := exec.Command("ps", "-eo", "pid,ppid,cmd")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "DEBUG: Failed to run ps command: %v\n", err)
+		if debug {
+			fmt.Fprintf(os.Stderr, "DEBUG: Failed to run ps command: %v\n", err)
+		}
 		return
 	}
 
 	lines := strings.Split(string(output), "\n")
-	fmt.Fprintf(os.Stderr, "DEBUG: Found %d processes in system\n", len(lines)-1)
+	if debug {
+		fmt.Fprintf(os.Stderr, "DEBUG: Found %d processes in system\n", len(lines)-1)
 
-	// Print header
-	fmt.Fprintf(os.Stderr, "DEBUG: Process tree:\n")
-	fmt.Fprintf(os.Stderr, "DEBUG: PID     PPID    CMD\n")
+		// Print header
+		fmt.Fprintf(os.Stderr, "DEBUG: Process tree:\n")
+		fmt.Fprintf(os.Stderr, "DEBUG: PID     PPID    CMD\n")
+	}
 
 	// First, print the main process
 	for _, line := range lines {
 		fields := strings.Fields(line)
 		if len(fields) >= 3 {
 			processPid := strings.TrimSpace(fields[0])
-			if processPid == fmt.Sprintf("%d", pid) {
+			if processPid == fmt.Sprintf("%d", pid) && debug {
 				fmt.Fprintf(os.Stderr, "DEBUG: %s\n", line)
 				break
 			}
@@ -120,7 +142,7 @@ func listProcessTree(pid int) {
 		fields := strings.Fields(line)
 		if len(fields) >= 3 {
 			processPpid := strings.TrimSpace(fields[1])
-			if processPpid == fmt.Sprintf("%d", pid) {
+			if processPpid == fmt.Sprintf("%d", pid) && debug {
 				fmt.Fprintf(os.Stderr, "DEBUG: %s\n", line)
 			}
 		}

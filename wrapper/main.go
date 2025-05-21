@@ -41,6 +41,7 @@ func main() {
 	checkInterval := wrapperFlags.Int("check-interval", 1, "Resource check interval in seconds")
 	monitoringEnabled := wrapperFlags.Bool("monitor", true, "Enable resource monitoring")
 	skipPrerequisites := wrapperFlags.Bool("skip-checks", false, "Skip prerequisite checks")
+	debugMode := wrapperFlags.Bool("debug", false, "Enable debug logging")
 
 	// Process arguments
 	var argsToPass []string
@@ -135,7 +136,7 @@ func main() {
 	// Set up resource monitoring if enabled
 	var monitor *ResourceMonitor
 	if *monitoringEnabled {
-		monitor = NewResourceMonitor(*minDiskSpace, *maxMemory, *checkInterval, outputDir, cmd.Process)
+		monitor = NewResourceMonitor(*minDiskSpace, *maxMemory, *checkInterval, outputDir, cmd.Process, *debugMode)
 		monitor.StartMonitoring()
 	}
 
