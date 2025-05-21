@@ -9,7 +9,65 @@ import (
 	"strings"
 )
 
+// printHelp displays the usage information for both the wrapper and RustHound-CE
+func printHelp() {
+	fmt.Println("rusthound-wrapper - some description")
+	fmt.Println("")
+	fmt.Println("WRAPPER OPTIONS:")
+	fmt.Println("  --min-disk <MB>        Minimum disk space in MB before terminating (default: 500)")
+	fmt.Println("  --max-memory <MB>      Maximum memory usage in MB before terminating (default: 2048)")
+	fmt.Println("  --check-interval <sec> Resource check interval in seconds (default: 1)")
+	fmt.Println("  --monitor              Enable resource monitoring (default: true)")
+	fmt.Println("  --skip-checks          Skip prerequisite checks (default: false)")
+	fmt.Println("  --debug                Enable debug logging (default: false)")
+	fmt.Println("  --help                 Display this help message")
+	fmt.Println("  --                     Separator for wrapper and RustHound-CE options")
+	fmt.Println("")
+	fmt.Println("RUSTHOUND-CE OPTIONS:")
+	fmt.Println("  -v...                  Set the level of verbosity")
+	fmt.Println("  -h, --help             Print RustHound-CE help")
+	fmt.Println("  -V, --version          Print version")
+	fmt.Println("")
+	fmt.Println("REQUIRED VALUES:")
+	fmt.Println("  -d, --domain <domain>  Domain name like: DOMAIN.LOCAL")
+	fmt.Println("")
+	fmt.Println("OPTIONAL VALUES:")
+	fmt.Println("  -u, --ldapusername <ldapusername>  LDAP username, like: user@domain.local")
+	fmt.Println("  -p, --ldappassword <ldappassword>  LDAP password")
+	fmt.Println("  -f, --ldapfqdn <ldapfqdn>          Domain Controller FQDN like: DC01.DOMAIN.LOCAL or just DC01")
+	fmt.Println("  -i, --ldapip <ldapip>              Domain Controller IP address like: 192.168.1.10")
+	fmt.Println("  -P, --ldapport <ldapport>          LDAP port [default: 389]")
+	fmt.Println("  -n, --name-server <name-server>    Alternative IP address name server to use for DNS queries")
+	fmt.Println("  -o, --output <o>                   Output directory where you would like to save JSON files [default: ./]")
+	fmt.Println("")
+	fmt.Println("OPTIONAL FLAGS:")
+	fmt.Println("  -c, --collectionmethod [<COLLECTIONMETHOD>]")
+	fmt.Println("          Which information to collect. Supported: All (LDAP,SMB,HTTP requests), DCOnly (no computer connections, only LDAP requests)")
+	fmt.Println("          [possible values: All, DCOnly]")
+	fmt.Println("      --ldaps             Force LDAPS using for request like: ldaps://DOMAIN.LOCAL/")
+	fmt.Println("  -k, --kerberos          Use Kerberos authentication. Grabs credentials from ccache file (KRB5CCNAME)")
+	fmt.Println("      --dns-tcp           Use TCP instead of UDP for DNS queries")
+	fmt.Println("")
+	fmt.Println("OPTIONAL MODULES:")
+	fmt.Println("      --fqdn-resolver     Use fqdn-resolver module to get computers IP address")
+	fmt.Println("")
+	fmt.Println("EXAMPLES:")
+	fmt.Println("  rusthound-wrapper --min-disk 1000 --max-memory 4096 -- -d domain.local -u user@domain.local -p password")
+	fmt.Println("  rusthound-wrapper -- -d domain.local -u user@domain.local -p password -o /app/output")
+	fmt.Println("")
+	fmt.Println("OUTPUT DETAILS:")
+	fmt.Println("  - Security findings will be summarized and saved to summary.json")
+	fmt.Println("  - all files except summary.json will be compressed into a zip archive")
+	fmt.Println("  - Category summaries for security findings are displayed after processing")
+}
+
 func main() {
+	// Check for "help" command first
+	if len(os.Args) > 1 && (os.Args[1] == "help" || os.Args[1] == "--help" || os.Args[1] == "-h") {
+		printHelp()
+		return
+	}
+
 	// Find the index of "--" if present
 	delimiterIndex := -1
 	for i, arg := range os.Args {
@@ -21,19 +79,7 @@ func main() {
 
 	// Setup a custom FlagSet for our wrapper flags
 	wrapperFlags := flag.NewFlagSet("wrapper", flag.ExitOnError)
-	wrapperFlags.Usage = func() {
-		fmt.Println("RustHound-CE Wrapper - A resource monitoring wrapper for RustHound-CE")
-		fmt.Println("")
-		fmt.Println("Usage:")
-		fmt.Println("  rusthound-wrapper [wrapper options] [-- rusthound-ce options]")
-		fmt.Println("")
-		fmt.Println("Wrapper Options:")
-		wrapperFlags.PrintDefaults()
-		fmt.Println("")
-		fmt.Println("Examples:")
-		fmt.Println("  rusthound-wrapper --min-disk 1000 --max-memory 4096 -- -u username -p password -d domain.com")
-		fmt.Println("  rusthound-wrapper -- -o /custom/output/dir -u user@domain.com -p password")
-	}
+	wrapperFlags.Usage = printHelp
 
 	// Define flags for resource monitoring
 	minDiskSpace := wrapperFlags.Uint64("min-disk", 500, "Minimum disk space in MB before terminating")

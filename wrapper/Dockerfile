@@ -59,5 +59,14 @@ COPY --from=go-builder /build/wrapper/rusthound-wrapper /app/rusthound-wrapper
 # Create output directory
 RUN mkdir -p /app/output
 
-# Set the entrypoint to the Go wrapper
-ENTRYPOINT ["/app/rusthound-wrapper"]
+# Create an entrypoint script that handles help command
+RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
+    echo 'if [ "$1" = "help" ]; then' >> /app/entrypoint.sh && \
+    echo '  /app/rusthound-wrapper --help' >> /app/entrypoint.sh && \
+    echo 'else' >> /app/entrypoint.sh && \
+    echo '  /app/rusthound-wrapper "$@"' >> /app/entrypoint.sh && \
+    echo 'fi' >> /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
+
+# Set the entrypoint to our script
+ENTRYPOINT ["/app/entrypoint.sh"]
