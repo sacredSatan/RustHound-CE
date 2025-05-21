@@ -82,6 +82,19 @@ func main() {
 		}
 	}
 
+	// Filter out -z or --zip arguments
+	filteredArgs := make([]string, 0, len(argsToPass))
+	for i := 0; i < len(argsToPass); i++ {
+		// Skip -z or --zip
+		if argsToPass[i] == "-z" || argsToPass[i] == "--zip" {
+			fmt.Fprintf(os.Stderr, "INFO: Removing %s argument from rusthound command\n", argsToPass[i])
+			continue
+		}
+
+		filteredArgs = append(filteredArgs, argsToPass[i])
+	}
+	argsToPass = filteredArgs
+
 	// Ensure output directory exists
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
