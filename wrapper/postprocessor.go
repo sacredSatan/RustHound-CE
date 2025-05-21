@@ -1,0 +1,299 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// SecurityFinding represents a security issue detected during processing
+type SecurityFinding struct {
+	Type        string `json:"type"`
+	Username    string `json:"username"`
+	Description string `json:"description"`
+	Severity    string `json:"severity"`
+	FoundIn     string `json:"found_in"`
+}
+
+// Summary holds the overall summary of all processed files
+type Summary struct {
+	TotalFiles       int               `json:"total_files"`
+	TotalBytes       int64             `json:"total_bytes"`
+	ProcessingTime   string            `json:"processing_time"`
+	SecurityFindings []SecurityFinding `json:"security_findings"`
+}
+
+// JsonMeta represents the metadata section in RustHound JSON files
+type JsonMeta struct {
+	Type       string `json:"type"`
+	Count      int    `json:"count"`
+	Version    int    `json:"version"`
+	MethodName string `json:"methodName"`
+}
+
+// JsonFile represents the structure of a RustHound JSON file
+type JsonFile struct {
+	Meta JsonMeta `json:"meta"`
+	Data []any    `json:"data"`
+}
+
+// UserProperties represents the Properties section of a user object
+type UserProperties struct {
+	Name                 string `json:"name"`
+	DistinguishedName    string `json:"distinguishedname"`
+	Enabled              bool   `json:"enabled"`
+	LastLogon            int64  `json:"lastlogon"`
+	LastLogonTimestamp   int64  `json:"lastlogontimestamp"`
+	PasswordNotRequired  bool   `json:"passwordnotreqd"`
+	WhenCreated          int64  `json:"whencreated"`
+	PwdLastSet           int64  `json:"pwdlastset"`
+	DontReqPreauth       bool   `json:"dontreqpreauth"`
+	ServicePrincipalName string `json:"serviceprincipalname"`
+}
+
+// ADUser represents a RustHound AD user object with its properties
+type ADUser struct {
+	ObjectIdentifier string         `json:"ObjectIdentifier"`
+	IsDeleted        bool           `json:"IsDeleted"`
+	IsACLProtected   bool           `json:"IsACLProtected"`
+	Properties       UserProperties `json:"Properties"`
+}
+
+// Config holds configuration options for processing
+type Config struct {
+	DormantDaysThreshold int  // Number of days of inactivity to consider an account dormant
+	Debug                bool // Enable debug output
+}
+
+// DefaultConfig returns a default configuration
+func DefaultConfig() *Config {
+	return &Config{
+		DormantDaysThreshold: 90, // Default to 90 days
+		Debug:                false,
+	}
+}
+
+// ProcessRustHoundOutput analyzes all files in the output directory and returns a summary
+func ProcessRustHoundOutput(outputDir string, debug bool) (*Summary, error) {
+	config := DefaultConfig()
+	config.Debug = debug
+	return ProcessRustHoundOutputWithConfig(outputDir, config)
+}
+
+// ProcessRustHoundOutputWithConfig analyzes all files with custom configuration
+func ProcessRustHoundOutputWithConfig(outputDir string, config *Config) (*Summary, error) {
+	startTime := time.Now()
+	if config.Debug {
+		fmt.Printf("DEBUG: Starting post-processing of files in %s\n", outputDir)
+		fmt.Printf("DEBUG: Using dormant days threshold: %d days\n", config.DormantDaysThreshold)
+	}
+
+	summary := &Summary{
+		SecurityFindings: make([]SecurityFinding, 0),
+	}
+
+	// Walk through all files in the output directory
+	err := filepath.Walk(outputDir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories
+		if info.IsDir() {
+			return nil
+		}
+
+		// Only process JSON files
+		if !strings.HasSuffix(strings.ToLower(info.Name()), ".json") {
+			return nil
+		}
+
+		// Read the file
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if config.Debug {
+				fmt.Printf("DEBUG: Error reading file %s: %v\n", path, err)
+			}
+			return nil
+		}
+
+		summary.TotalFiles++
+		summary.TotalBytes += info.Size()
+
+		// Try to parse JSON
+		var jsonFile JsonFile
+		err = json.Unmarshal(data, &jsonFile)
+		if err != nil {
+			if config.Debug {
+				fmt.Printf("DEBUG: Error parsing JSON in file %s: %v\n", path, err)
+			}
+			return nil
+		}
+
+		// Extract file type from file name or metadata
+		fileType := "unknown"
+		if jsonFile.Meta.Type != "" {
+			fileType = jsonFile.Meta.Type
+		} else {
+			// Try to extract type from filename
+			parts := strings.Split(info.Name(), "_")
+			if len(parts) >= 3 {
+				fileNameParts := strings.Split(parts[len(parts)-1], ".")
+				if len(fileNameParts) > 0 {
+					fileType = fileNameParts[0]
+				}
+			}
+		}
+
+		// Process the file for security detections if it contains user data
+		if fileType == "users" || strings.Contains(strings.ToLower(info.Name()), "user") {
+			processUsersForSecurityIssues(jsonFile.Data, &summary.SecurityFindings, path, config)
+		}
+
+		if config.Debug {
+			fmt.Printf("DEBUG: Processed file %s: type=%s, count=%d\n",
+				info.Name(), fileType, jsonFile.Meta.Count)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("error walking directory: %v", err)
+	}
+
+	// Set processing time
+	summary.ProcessingTime = time.Since(startTime).String()
+
+	return summary, nil
+}
+
+// processUsersForSecurityIssues analyzes user data for security issues
+func processUsersForSecurityIssues(userData []any, findings *[]SecurityFinding, sourcePath string, config *Config) {
+	if config.Debug {
+		fmt.Printf("DEBUG: Processing %d user objects for security issues\n", len(userData))
+	}
+
+	// Get current time for dormant account checks
+	now := time.Now()
+	dormantThreshold := now.AddDate(0, 0, -config.DormantDaysThreshold)
+
+	enabledCount := 0
+	for _, rawUser := range userData {
+		// Convert the generic user data to JSON and back to get our structured format
+		userBytes, err := json.Marshal(rawUser)
+		if err != nil {
+			if config.Debug {
+				fmt.Printf("DEBUG: Error marshaling user data: %v\n", err)
+			}
+			continue
+		}
+
+		var user ADUser
+		if err := json.Unmarshal(userBytes, &user); err != nil {
+			if config.Debug {
+				fmt.Printf("DEBUG: Error parsing user object: %v\n", err)
+			}
+			continue
+		}
+
+		// Skip processing for disabled accounts
+		if !user.Properties.Enabled {
+			if config.Debug {
+				fmt.Printf("DEBUG: Skipping disabled account: %s\n", user.Properties.Name)
+			}
+			continue
+		}
+		enabledCount++
+
+		// Rule 1: Dormant accounts with no activity in past X days
+		lastActive := getLastActiveTime(user)
+
+		// Case 1: Account has never logged in (lastlogon = 0)
+		if lastActive == 0 {
+			if config.Debug {
+				fmt.Printf("DEBUG: User %s has never logged in (no lastlogon time)\n", user.Properties.Name)
+			}
+
+			*findings = append(*findings, SecurityFinding{
+				Type:        "dormant_account",
+				Username:    user.Properties.Name,
+				Description: "Account has never logged in",
+				Severity:    "medium",
+				FoundIn:     filepath.Base(sourcePath),
+			})
+			if config.Debug {
+				fmt.Printf("DEBUG: Found dormant account: %s (never logged in)\n", user.Properties.Name)
+			}
+		} else {
+			// Case 2: Account has logged in, check if last activity is before dormant threshold
+			// Using direct Unix timestamps
+			lastActiveTime := time.Unix(lastActive, 0)
+
+			// Only consider accounts as dormant if:
+			// 1. Their last activity timestamp is in the past (not future)
+			// 2. Their last activity is before the dormant threshold
+			if lastActiveTime.Before(now) && lastActiveTime.Before(dormantThreshold) {
+				*findings = append(*findings, SecurityFinding{
+					Type:        "dormant_account",
+					Username:    user.Properties.Name,
+					Description: fmt.Sprintf("Account inactive since %s (>%d days)", lastActiveTime.Format("2006-01-02"), config.DormantDaysThreshold),
+					Severity:    "medium",
+					FoundIn:     filepath.Base(sourcePath),
+				})
+				if config.Debug {
+					fmt.Printf("DEBUG: Found dormant account: %s, last active: %s (timestamp: %d)\n",
+						user.Properties.Name, lastActiveTime.Format("2006-01-02"), lastActive)
+				}
+			} else if lastActiveTime.After(now) && config.Debug {
+				fmt.Printf("DEBUG: User %s has a future last active date (clock skew?): %s\n",
+					user.Properties.Name, lastActiveTime.Format("2006-01-02"))
+			}
+		}
+
+		// Rule 2: Guest accounts with password not required
+		if strings.Contains(strings.ToLower(user.Properties.Name), "guest") && user.Properties.PasswordNotRequired {
+			*findings = append(*findings, SecurityFinding{
+				Type:        "insecure_guest",
+				Username:    user.Properties.Name,
+				Description: "Guest account with 'password not required' flag set",
+				Severity:    "high",
+				FoundIn:     filepath.Base(sourcePath),
+			})
+			if config.Debug {
+				fmt.Printf("DEBUG: Found guest account with no password required: %s\n", user.Properties.Name)
+			}
+		}
+	}
+
+	if config.Debug {
+		fmt.Printf("DEBUG: Processed %d enabled accounts out of %d total accounts\n", enabledCount, len(userData))
+	}
+}
+
+// getLastActiveTime returns the most recent activity timestamp from lastlogon and lastlogontimestamp
+func getLastActiveTime(user ADUser) int64 {
+	if user.Properties.LastLogonTimestamp > user.Properties.LastLogon {
+		return user.Properties.LastLogonTimestamp
+	}
+	return user.Properties.LastLogon
+}
+
+// SaveSummaryToFile saves the summary to a JSON file
+func SaveSummaryToFile(summary *Summary, outputPath string) error {
+	jsonData, err := json.MarshalIndent(summary, "", "  ")
+	if err != nil {
+		return fmt.Errorf("error marshaling summary: %v", err)
+	}
+
+	err = os.WriteFile(outputPath, jsonData, 0644)
+	if err != nil {
+		return fmt.Errorf("error writing summary file: %v", err)
+	}
+
+	return nil
+}
