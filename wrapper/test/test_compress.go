@@ -3,7 +3,6 @@ package main
 import (
 	"archive/zip"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -72,156 +71,80 @@ type Config struct {
 }
 
 func main() {
-	// Define command line flags
-	jsonFilePath := flag.String("file", "", "Path to RustHound JSON file to analyze")
-	dormantDays := flag.Int("dormant", 90, "Number of days of inactivity to consider an account dormant")
-	verbose := flag.Bool("v", false, "Enable verbose output")
-	outputFile := flag.String("output", "", "Path to save results JSON (optional)")
-	compressOutput := flag.Bool("compress", false, "Compress output into a zip archive")
-	compressDir := flag.String("compress-dir", "", "Directory to save the compressed archive (default: current directory)")
-	flag.Parse()
-
-	if *jsonFilePath == "" {
-		fmt.Println("Error: Please specify a JSON file with -file flag")
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	// Check if file exists
-	fileInfo, err := os.Stat(*jsonFilePath)
-	if err != nil {
-		fmt.Printf("Error accessing file %s: %v\n", *jsonFilePath, err)
-		os.Exit(1)
-	}
-
-	if fileInfo.IsDir() {
-		fmt.Printf("Error: %s is a directory, not a file\n", *jsonFilePath)
-		os.Exit(1)
-	}
-
-	// Create a temporary directory to hold just this file
-	tempDir, err := os.MkdirTemp("", "rhcel-test")
-	if err != nil {
-		fmt.Printf("Error creating temp directory: %v\n", err)
-		os.Exit(1)
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Copy the file to the temp directory
-	targetPath := filepath.Join(tempDir, filepath.Base(*jsonFilePath))
-	sourceData, err := os.ReadFile(*jsonFilePath)
-	if err != nil {
-		fmt.Printf("Error reading source file: %v\n", err)
-		os.Exit(1)
-	}
-
-	err = os.WriteFile(targetPath, sourceData, 0644)
-	if err != nil {
-		fmt.Printf("Error copying file to temp directory: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Process the file using the wrapper package
-	fmt.Printf("Analyzing file: %s\n", *jsonFilePath)
-	fmt.Printf("Using dormant account threshold: %d days\n", *dormantDays)
-	fmt.Printf("Using temp directory: %s\n", tempDir)
-
-	// Create a configuration
-	config := &Config{
-		DormantDaysThreshold: *dormantDays,
-		Debug:                *verbose,
-	}
-
-	// Process the file
-	startTime := time.Now()
-	summary, err := processRustHoundOutput(tempDir, config)
-	if err != nil {
-		fmt.Printf("Error processing file: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Print the findings
-	if len(summary.SecurityFindings) == 0 {
-		fmt.Println("No security issues found.")
+	// Check if arguments are provided
+	var outputDir string
+	if len(os.Args) > 1 {
+		outputDir = os.Args[1]
 	} else {
-		fmt.Printf("Found %d security issues:\n", len(summary.SecurityFindings))
-		for i, finding := range summary.SecurityFindings {
-			fmt.Printf("%d) [%s] %s: %s (Severity: %s)\n",
-				i+1, finding.Type, finding.Username, finding.Description, finding.Severity)
-		}
+		outputDir = "../output"
+	}
+	debug := true
+
+	// Check if output directory exists
+	_, err := os.Stat(outputDir)
+	if os.IsNotExist(err) {
+		fmt.Printf("Output directory %s does not exist\n", outputDir)
+		os.Exit(1)
 	}
 
-	// Save results to JSON file if requested
-	if *outputFile != "" {
-		err = saveSummaryToFile(summary, *outputFile)
+	// Process the output directory
+	fmt.Printf("Processing output directory: %s\n", outputDir)
+	summary, err := processRustHoundOutput(outputDir, debug)
+	if err != nil {
+		fmt.Printf("Error during processing: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Print findings summary
+	fmt.Printf("Found %d security issues\n", len(summary.SecurityFindings))
+	for i, finding := range summary.SecurityFindings {
+		fmt.Printf("%d) [%s] %s: %s (Severity: %s)\n",
+			i+1, finding.Type, finding.Username, finding.Description, finding.Severity)
+	}
+
+	// Create summary file
+	summaryPath := filepath.Join(outputDir, "summary.json")
+	err = saveSummaryToFile(summary, summaryPath)
+	if err != nil {
+		fmt.Printf("Error saving summary: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Summary saved to: %s\n", summaryPath)
+
+	// Compress the output
+	fmt.Println("\nCompressing output files and cleaning up...")
+	err = compressOutputAndCleanup(outputDir, debug)
+	if err != nil {
+		fmt.Printf("Error compressing output: %v\n", err)
+		os.Exit(1)
+	}
+
+	// List files after compression
+	fmt.Println("\nFiles after compression:")
+	err = filepath.Walk(outputDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			fmt.Printf("Error saving results to %s: %v\n", *outputFile, err)
-			os.Exit(1)
+			return err
 		}
-		fmt.Printf("Results saved to %s\n", *outputFile)
-	}
-
-	// Compress results if requested
-	if *compressOutput {
-		fmt.Println("\nCompressing results...")
-		// Determine where to save the compressed archive
-		compressTarget := "."
-		if *compressDir != "" {
-			compressTarget = *compressDir
-			// Create directory if it doesn't exist
-			if err := os.MkdirAll(*compressDir, 0755); err != nil {
-				fmt.Printf("Error creating compress directory: %v\n", err)
-				os.Exit(1)
-			}
-		}
-
-		// Create or copy summary file to temp dir if not already there
-		summaryInTempDir := filepath.Join(tempDir, "summary.json")
-		if *outputFile != "" {
-			// Copy the output file to the temp dir for inclusion in archive
-			summaryData, err := os.ReadFile(*outputFile)
+		if !info.IsDir() {
+			relPath, err := filepath.Rel(outputDir, path)
 			if err != nil {
-				fmt.Printf("Error reading summary file: %v\n", err)
-			} else {
-				err = os.WriteFile(summaryInTempDir, summaryData, 0644)
-				if err != nil {
-					fmt.Printf("Error copying summary to temp dir: %v\n", err)
-				}
+				relPath = path
 			}
-		} else {
-			// Create a summary file in the temp dir
-			err = saveSummaryToFile(summary, summaryInTempDir)
-			if err != nil {
-				fmt.Printf("Error creating summary in temp dir: %v\n", err)
-			}
+			fmt.Printf("- %s (%d bytes)\n", relPath, info.Size())
 		}
-
-		// Create timestamp for the archive name
-		timestamp := time.Now().Format("20060102_150405")
-		archiveName := filepath.Join(compressTarget, fmt.Sprintf("rusthound_results_%s.zip", timestamp))
-
-		err = compressDirectory(tempDir, archiveName, *verbose)
-		if err != nil {
-			fmt.Printf("Error compressing results: %v\n", err)
-		} else {
-			fmt.Printf("Results compressed to: %s\n", archiveName)
-		}
+		return nil
+	})
+	if err != nil {
+		fmt.Printf("Error listing files: %v\n", err)
+		os.Exit(1)
 	}
-
-	// Print summary
-	processingTime := time.Since(startTime)
-	fmt.Printf("\nSummary:\n")
-	fmt.Printf("- Files processed: %d\n", summary.TotalFiles)
-	fmt.Printf("- Processing time: %s\n", processingTime)
-	fmt.Printf("- Security findings: %d\n", len(summary.SecurityFindings))
 }
 
 // processRustHoundOutput analyzes all files in the output directory and returns a summary
-func processRustHoundOutput(outputDir string, config *Config) (*Summary, error) {
+func processRustHoundOutput(outputDir string, debug bool) (*Summary, error) {
 	startTime := time.Now()
-	if config.Debug {
+	if debug {
 		fmt.Printf("DEBUG: Starting post-processing of files in %s\n", outputDir)
-		fmt.Printf("DEBUG: Using dormant days threshold: %d days\n", config.DormantDaysThreshold)
 	}
 
 	summary := &Summary{
@@ -247,7 +170,7 @@ func processRustHoundOutput(outputDir string, config *Config) (*Summary, error) 
 		// Read the file
 		data, err := os.ReadFile(path)
 		if err != nil {
-			if config.Debug {
+			if debug {
 				fmt.Printf("DEBUG: Error reading file %s: %v\n", path, err)
 			}
 			return nil
@@ -260,7 +183,7 @@ func processRustHoundOutput(outputDir string, config *Config) (*Summary, error) 
 		var jsonFile JsonFile
 		err = json.Unmarshal(data, &jsonFile)
 		if err != nil {
-			if config.Debug {
+			if debug {
 				fmt.Printf("DEBUG: Error parsing JSON in file %s: %v\n", path, err)
 			}
 			return nil
@@ -283,10 +206,10 @@ func processRustHoundOutput(outputDir string, config *Config) (*Summary, error) 
 
 		// Process the file for security detections if it contains user data
 		if fileType == "users" || strings.Contains(strings.ToLower(info.Name()), "user") {
-			processUsersForSecurityIssues(jsonFile.Data, &summary.SecurityFindings, path, config)
+			processUsersForSecurityIssues(jsonFile.Data, &summary.SecurityFindings, path, debug)
 		}
 
-		if config.Debug {
+		if debug {
 			fmt.Printf("DEBUG: Processed file %s: type=%s, count=%d\n",
 				info.Name(), fileType, jsonFile.Meta.Count)
 		}
@@ -305,26 +228,21 @@ func processRustHoundOutput(outputDir string, config *Config) (*Summary, error) 
 }
 
 // processUsersForSecurityIssues analyzes user data for security issues
-func processUsersForSecurityIssues(userData []any, findings *[]SecurityFinding, sourcePath string, config *Config) {
-	if config.Debug {
+func processUsersForSecurityIssues(userData []any, findings *[]SecurityFinding, sourcePath string, debug bool) {
+	if debug {
 		fmt.Printf("DEBUG: Processing %d user objects for security issues\n", len(userData))
-		fmt.Printf("DEBUG: Current system time: %s\n", time.Now().Format("2006-01-02 15:04:05"))
 	}
 
 	// Get current time for dormant account checks
 	now := time.Now()
-	dormantThreshold := now.AddDate(0, 0, -config.DormantDaysThreshold)
-
-	if config.Debug {
-		fmt.Printf("DEBUG: Dormant threshold: %s\n", dormantThreshold.Format("2006-01-02 15:04:05"))
-	}
+	dormantThreshold := now.AddDate(0, 0, -90) // 90-day dormant threshold
 
 	enabledCount := 0
 	for _, rawUser := range userData {
 		// Convert the generic user data to JSON and back to get our structured format
 		userBytes, err := json.Marshal(rawUser)
 		if err != nil {
-			if config.Debug {
+			if debug {
 				fmt.Printf("DEBUG: Error marshaling user data: %v\n", err)
 			}
 			continue
@@ -332,7 +250,7 @@ func processUsersForSecurityIssues(userData []any, findings *[]SecurityFinding, 
 
 		var user ADUser
 		if err := json.Unmarshal(userBytes, &user); err != nil {
-			if config.Debug {
+			if debug {
 				fmt.Printf("DEBUG: Error parsing user object: %v\n", err)
 			}
 			continue
@@ -340,7 +258,7 @@ func processUsersForSecurityIssues(userData []any, findings *[]SecurityFinding, 
 
 		// Skip processing for disabled accounts
 		if !user.Properties.Enabled {
-			if config.Debug {
+			if debug {
 				fmt.Printf("DEBUG: Skipping disabled account: %s\n", user.Properties.Name)
 			}
 			continue
@@ -352,7 +270,7 @@ func processUsersForSecurityIssues(userData []any, findings *[]SecurityFinding, 
 
 		// Case 1: Account has never logged in (lastlogon = 0)
 		if lastActive == 0 {
-			if config.Debug {
+			if debug {
 				fmt.Printf("DEBUG: User %s has never logged in (no lastlogon time)\n", user.Properties.Name)
 			}
 
@@ -363,20 +281,9 @@ func processUsersForSecurityIssues(userData []any, findings *[]SecurityFinding, 
 				Severity:    "medium",
 				FoundIn:     filepath.Base(sourcePath),
 			})
-			fmt.Printf("Found dormant account: %s (never logged in)\n", user.Properties.Name)
 		} else {
 			// Case 2: Account has logged in, check if last activity is before dormant threshold
-			// Using direct Unix timestamps
 			lastActiveTime := time.Unix(lastActive, 0)
-			if config.Debug {
-				fmt.Printf("DEBUG: User %s last active: %s (timestamp: %d)\n",
-					user.Properties.Name, lastActiveTime.Format("2006-01-02"), lastActive)
-
-				// Compare timestamps
-				isPast := lastActiveTime.Before(now)
-				isDormant := lastActiveTime.Before(dormantThreshold)
-				fmt.Printf("DEBUG: Time comparisons - isPast: %v, isDormant: %v\n", isPast, isDormant)
-			}
 
 			// Only consider accounts as dormant if:
 			// 1. Their last activity timestamp is in the past (not future)
@@ -385,20 +292,14 @@ func processUsersForSecurityIssues(userData []any, findings *[]SecurityFinding, 
 				*findings = append(*findings, SecurityFinding{
 					Type:        "dormant_account",
 					Username:    user.Properties.Name,
-					Description: fmt.Sprintf("Account inactive since %s (>%d days)", lastActiveTime.Format("2006-01-02"), config.DormantDaysThreshold),
+					Description: fmt.Sprintf("Account inactive since %s (>90 days)", lastActiveTime.Format("2006-01-02")),
 					Severity:    "medium",
 					FoundIn:     filepath.Base(sourcePath),
 				})
-				fmt.Printf("Found dormant account: %s, last active: %s\n",
-					user.Properties.Name, lastActiveTime.Format("2006-01-02"))
-			} else if lastActiveTime.After(now) && config.Debug {
-				fmt.Printf("DEBUG: User %s has a future last active date (clock skew?): %s\n",
-					user.Properties.Name, lastActiveTime.Format("2006-01-02"))
 			}
 		}
 
 		// Rule 2: Guest accounts with password not required
-		// Check for "guest" in name and passwordnotreqd flag
 		if strings.Contains(strings.ToLower(user.Properties.Name), "guest") && user.Properties.PasswordNotRequired {
 			*findings = append(*findings, SecurityFinding{
 				Type:        "insecure_guest",
@@ -407,17 +308,10 @@ func processUsersForSecurityIssues(userData []any, findings *[]SecurityFinding, 
 				Severity:    "high",
 				FoundIn:     filepath.Base(sourcePath),
 			})
-			fmt.Printf("Found guest account with no password required: %s\n", user.Properties.Name)
-		}
-
-		// Show user account properties in verbose mode
-		if config.Debug {
-			fmt.Printf("DEBUG: User properties for %s - PasswordNotRequired: %v\n",
-				user.Properties.Name, user.Properties.PasswordNotRequired)
 		}
 	}
 
-	if config.Debug {
+	if debug {
 		fmt.Printf("DEBUG: Processed %d enabled accounts out of %d total accounts\n", enabledCount, len(userData))
 	}
 }
@@ -445,10 +339,19 @@ func saveSummaryToFile(summary *Summary, outputPath string) error {
 	return nil
 }
 
-// compressDirectory compresses a directory into a zip file
-func compressDirectory(sourceDir, destZip string, debug bool) error {
-	// Create zip file
-	zipFile, err := os.Create(destZip)
+// compressOutputAndCleanup compresses all files in the output directory into a zip file
+// and removes the original files, keeping only the summary.json file
+func compressOutputAndCleanup(outputDir string, debug bool) error {
+	if debug {
+		fmt.Printf("DEBUG: Compressing output files in %s\n", outputDir)
+	}
+
+	// Create timestamp for the archive name
+	timestamp := time.Now().Format("20060102_150405")
+	archiveName := filepath.Join(outputDir, fmt.Sprintf("rusthound_results_%s.zip", timestamp))
+
+	// Create zip archive
+	zipFile, err := os.Create(archiveName)
 	if err != nil {
 		return fmt.Errorf("error creating zip file: %v", err)
 	}
@@ -458,14 +361,22 @@ func compressDirectory(sourceDir, destZip string, debug bool) error {
 	zipWriter := zip.NewWriter(zipFile)
 	defer zipWriter.Close()
 
-	// Walk through all files in the source directory
-	err = filepath.Walk(sourceDir, func(path string, info fs.FileInfo, err error) error {
+	// Collect list of files to remove after compression
+	filesToRemove := []string{}
+
+	// Walk through all files in the output directory
+	err = filepath.Walk(outputDir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
 		// Skip directories
 		if info.IsDir() {
+			return nil
+		}
+
+		// Skip the archive itself
+		if path == archiveName {
 			return nil
 		}
 
@@ -479,7 +390,7 @@ func compressDirectory(sourceDir, destZip string, debug bool) error {
 		}
 
 		// Get relative path for zip entry
-		relPath, err := filepath.Rel(sourceDir, path)
+		relPath, err := filepath.Rel(outputDir, path)
 		if err != nil {
 			relPath = filepath.Base(path)
 		}
@@ -506,8 +417,35 @@ func compressDirectory(sourceDir, destZip string, debug bool) error {
 			fmt.Printf("DEBUG: Added file to archive: %s\n", relPath)
 		}
 
+		// Add to list of files to remove, but keep summary.json
+		if filepath.Base(path) != "summary.json" {
+			filesToRemove = append(filesToRemove, path)
+		}
+
 		return nil
 	})
 
-	return err
+	if err != nil {
+		return fmt.Errorf("error walking directory for compression: %v", err)
+	}
+
+	// Close the zip writer before removing files
+	zipWriter.Close()
+
+	// Remove the original files (except summary.json)
+	for _, fileToRemove := range filesToRemove {
+		err := os.Remove(fileToRemove)
+		if err != nil {
+			if debug {
+				fmt.Printf("DEBUG: Error removing file %s: %v\n", fileToRemove, err)
+			}
+		} else if debug {
+			fmt.Printf("DEBUG: Removed original file: %s\n", fileToRemove)
+		}
+	}
+
+	fmt.Printf("Archive created: %s\n", archiveName)
+	fmt.Printf("Original files removed, keeping only summary.json and archive\n")
+
+	return nil
 }

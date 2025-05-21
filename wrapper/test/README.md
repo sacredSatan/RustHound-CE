@@ -15,6 +15,8 @@ go run analyze_json.go -file <path-to-json-file> [options]
 - `-dormant <days>`: Number of days of inactivity to consider an account dormant (default: 90)
 - `-v`: Enable verbose output with detailed information
 - `-output <path>`: Path to save results as JSON (optional)
+- `-compress`: Compress output into a zip archive (default: false)
+- `-compress-dir <path>`: Directory to save the compressed archive (default: current directory)
 
 ### Examples
 
@@ -38,6 +40,16 @@ Save results to a file:
 go run analyze_json.go -file ../output/users.json -output findings.json
 ```
 
+Compress results into an archive:
+```bash
+go run analyze_json.go -file ../output/users.json -compress
+```
+
+Compress and specify output directory:
+```bash
+go run analyze_json.go -file ../output/users.json -compress -compress-dir ./archives
+```
+
 ## How It Works
 
 This tool:
@@ -45,6 +57,7 @@ This tool:
 2. Copies the specified JSON file to this directory
 3. Calls the same `ProcessRustHoundOutput` function used by the main program
 4. Displays the results
+5. Optionally compresses the results into a zip archive
 
 ## Current Security Rules
 

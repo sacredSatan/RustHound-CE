@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -294,6 +295,117 @@ func SaveSummaryToFile(summary *Summary, outputPath string) error {
 	if err != nil {
 		return fmt.Errorf("error writing summary file: %v", err)
 	}
+
+	return nil
+}
+
+// CompressOutputAndCleanup compresses all files in the output directory into a zip file
+// and removes the original files, keeping only the summary.json file
+func CompressOutputAndCleanup(outputDir string, debug bool) error {
+	if debug {
+		fmt.Printf("DEBUG: Compressing output files in %s\n", outputDir)
+	}
+
+	// Create timestamp for the archive name
+	timestamp := time.Now().Format("20060102_150405")
+	archiveName := filepath.Join(outputDir, fmt.Sprintf("rusthound_results_%s.zip", timestamp))
+
+	// Create zip archive
+	zipFile, err := os.Create(archiveName)
+	if err != nil {
+		return fmt.Errorf("error creating zip file: %v", err)
+	}
+	defer zipFile.Close()
+
+	// Create zip writer
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// Collect list of files to remove after compression
+	filesToRemove := []string{}
+
+	// Walk through all files in the output directory
+	err = filepath.Walk(outputDir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories
+		if info.IsDir() {
+			return nil
+		}
+
+		// Skip the archive itself
+		if path == archiveName {
+			return nil
+		}
+
+		// Read file to be compressed
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if debug {
+				fmt.Printf("DEBUG: Error reading file for compression %s: %v\n", path, err)
+			}
+			return nil
+		}
+
+		// Get relative path for zip entry
+		relPath, err := filepath.Rel(outputDir, path)
+		if err != nil {
+			relPath = filepath.Base(path)
+		}
+
+		// Create zip entry
+		zipEntry, err := zipWriter.Create(relPath)
+		if err != nil {
+			if debug {
+				fmt.Printf("DEBUG: Error creating zip entry for %s: %v\n", relPath, err)
+			}
+			return nil
+		}
+
+		// Write file content to zip
+		_, err = zipEntry.Write(data)
+		if err != nil {
+			if debug {
+				fmt.Printf("DEBUG: Error writing zip entry for %s: %v\n", relPath, err)
+			}
+			return nil
+		}
+
+		if debug {
+			fmt.Printf("DEBUG: Added file to archive: %s\n", relPath)
+		}
+
+		// Add to list of files to remove, but keep summary.json
+		if filepath.Base(path) != "summary.json" {
+			filesToRemove = append(filesToRemove, path)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("error walking directory for compression: %v", err)
+	}
+
+	// Close the zip writer before removing files
+	zipWriter.Close()
+
+	// Remove the original files (except summary.json)
+	for _, fileToRemove := range filesToRemove {
+		err := os.Remove(fileToRemove)
+		if err != nil {
+			if debug {
+				fmt.Printf("DEBUG: Error removing file %s: %v\n", fileToRemove, err)
+			}
+		} else if debug {
+			fmt.Printf("DEBUG: Removed original file: %s\n", fileToRemove)
+		}
+	}
+
+	fmt.Printf("Archive created: %s\n", archiveName)
+	fmt.Printf("Original files removed, keeping only summary.json and archive\n")
 
 	return nil
 }

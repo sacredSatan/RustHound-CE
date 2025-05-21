@@ -42,6 +42,7 @@ func main() {
 	monitoringEnabled := wrapperFlags.Bool("monitor", true, "Enable resource monitoring")
 	skipPrerequisites := wrapperFlags.Bool("skip-checks", false, "Skip prerequisite checks")
 	debugMode := wrapperFlags.Bool("debug", false, "Enable debug logging")
+	compressOutput := wrapperFlags.Bool("compress", true, "Compress output files into a zip archive and clean up originals")
 
 	// Process arguments
 	var argsToPass []string
@@ -205,6 +206,15 @@ func main() {
 		fmt.Printf("\nSecurity findings:\n")
 		for _, finding := range summary.SecurityFindings {
 			fmt.Printf("- %s: %s\n", finding.Type, finding.Description)
+		}
+
+		// Compress output files and clean up if enabled
+		if *compressOutput {
+			fmt.Println("\nCompressing output files and cleaning up...")
+			err = CompressOutputAndCleanup(outputDir, *debugMode)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error compressing output files: %v\n", err)
+			}
 		}
 	}
 
