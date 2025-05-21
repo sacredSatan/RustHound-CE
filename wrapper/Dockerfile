@@ -27,12 +27,15 @@ RUN find /build/RustHound-CE/target/release -type f -executable -not -name "*.d"
 # Go builder stage
 FROM golang:1.20-buster as go-builder
 
-# Copy the Go wrapper source
-WORKDIR /build
-COPY wrapper.go .
+# Create workdir and copy all Go wrapper source files
+WORKDIR /build/wrapper
+# Copy directly from the current directory (which is the wrapper directory)
+COPY *.go ./
 
-# Build the Go wrapper
-RUN go build -o rusthound-wrapper wrapper.go
+# Initialize a Go module and build the wrapper
+RUN go mod init rhwrapper && \
+    go mod tidy && \
+    go build -o rusthound-wrapper .
 
 # Final stage - using bookworm (Debian 12) for newer GLIBC version
 FROM debian:bookworm-slim
@@ -51,7 +54,7 @@ WORKDIR /app
 COPY --from=rust-builder /build/RustHound-CE/target/release/rusthound-ce /app/rusthound-ce
 
 # Copy Go wrapper from go-builder stage
-COPY --from=go-builder /build/rusthound-wrapper /app/rusthound-wrapper
+COPY --from=go-builder /build/wrapper/rusthound-wrapper /app/rusthound-wrapper
 
 # Create output directory
 RUN mkdir -p /app/output
