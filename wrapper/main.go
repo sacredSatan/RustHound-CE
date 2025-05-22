@@ -187,7 +187,7 @@ func printSuccessBanner(execDir string) {
 		fmt.Printf("  - %s\n", logFileName)
 	}
 	fmt.Println("")
-	fmt.Println("Please send these files securely to Permiso support. This will be")
+	fmt.Println("Please send the zip file securely to Permiso support. This will be")
 	fmt.Println("sent to Permiso's threat research team and engineering team to build")
 	fmt.Println("detections and an Active Directory application that can run on a")
 	fmt.Println("full and regular basis.")
@@ -277,9 +277,9 @@ func printErrorBanner(execDir string) {
 			fmt.Fprintf(logFile, "  - %s\n", logFileName)
 		}
 		fmt.Fprintln(logFile, "")
-		fmt.Fprintln(logFile, "Even though errors were encountered, please send these files securely")
-		fmt.Fprintln(logFile, "to Permiso support. This will help our threat research and engineering")
-		fmt.Fprintln(logFile, "teams troubleshoot issues and improve the scanner for future use.")
+		fmt.Fprintln(logFile, "Please send the zip file securely to Permiso support. The file contains")
+		fmt.Fprintln(logFile, "execution logs that will help our threat research and engineering")
+		fmt.Fprintln(logFile, "teams troubleshoot issues.")
 		fmt.Fprintln(logFile, "=====================================================================")
 	}
 }
