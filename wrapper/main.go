@@ -95,6 +95,7 @@ func printBanner() {
 	fmt.Println("using the Rusthound open source utility, and machine/OS/network")
 	fmt.Println("diagnostics to enable a fully deployed AD scanner.")
 	fmt.Println("=====================================================================")
+	fmt.Println("")
 }
 
 // printHelp displays the usage information for both the wrapper and RustHound-CE
@@ -187,7 +188,7 @@ func printSuccessBanner(execDir string) {
 		fmt.Printf("  - %s\n", logFileName)
 	}
 	fmt.Println("")
-	fmt.Println("Please send the zip file securely to Permiso support. This will be")
+	fmt.Println("Please send the files securely to Permiso support. This will be")
 	fmt.Println("sent to Permiso's threat research team and engineering team to build")
 	fmt.Println("detections and an Active Directory application that can run on a")
 	fmt.Println("full and regular basis.")
@@ -210,7 +211,7 @@ func printSuccessBanner(execDir string) {
 			fmt.Fprintf(logFile, "  - %s\n", logFileName)
 		}
 		fmt.Fprintln(logFile, "")
-		fmt.Fprintln(logFile, "Please send the zip file securely to Permiso support. This will be")
+		fmt.Fprintln(logFile, "Please send the files securely to Permiso support. This will be")
 		fmt.Fprintln(logFile, "sent to Permiso's threat research team and engineering team to build")
 		fmt.Fprintln(logFile, "detections and an Active Directory application that can run on a")
 		fmt.Fprintln(logFile, "full and regular basis.")
@@ -255,7 +256,7 @@ func printErrorBanner(execDir string) {
 		fmt.Printf("  - %s\n", logFileName)
 	}
 	fmt.Println("")
-	fmt.Println("Please send the zip file securely to Permiso support. The file contains")
+	fmt.Println("Please send the files securely to Permiso support. The file contains")
 	fmt.Println("execution logs that will help our threat research and engineering")
 	fmt.Println("teams troubleshoot issues.")
 	fmt.Println("=====================================================================")
@@ -277,7 +278,7 @@ func printErrorBanner(execDir string) {
 			fmt.Fprintf(logFile, "  - %s\n", logFileName)
 		}
 		fmt.Fprintln(logFile, "")
-		fmt.Fprintln(logFile, "Please send the zip file securely to Permiso support. The file contains")
+		fmt.Fprintln(logFile, "Please send the files securely to Permiso support. The file contains")
 		fmt.Fprintln(logFile, "execution logs that will help our threat research and engineering")
 		fmt.Fprintln(logFile, "teams troubleshoot issues.")
 		fmt.Fprintln(logFile, "=====================================================================")
@@ -529,6 +530,8 @@ func main() {
 	// Get the process ID for monitoring
 	pid := cmd.Process.Pid
 	logPrintf("RustHound-CE started with PID: %d\n", pid)
+	fmt.Println("")
+
 	if *debugMode {
 		logErrorf("DEBUG: Process details - PID: %d, Process: %+v\n", pid, cmd.Process)
 	}
@@ -659,7 +662,7 @@ func main() {
 		// Compress output files and clean up if enabled
 		if *compressOutput {
 			fmt.Println("")
-			logPrintln("Compressing output files and cleaning up...")
+			logPrintln("Compressing output files...")
 			err = CompressOutputAndCleanup(execDir, *debugMode)
 			if err != nil {
 				hasErrors = true

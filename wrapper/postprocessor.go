@@ -441,7 +441,7 @@ func CompressOutputAndCleanup(outputDir string, debug bool) error {
 	}
 
 	logPrintf("Archive created: %s\n", archiveName)
-	logPrintf("Original files removed, keeping only permiso_security_findings.json, log file, and archive\n")
+	// logPrintf("Original files removed, keeping only permiso_security_findings.json, log file, and archive\n")
 
 	return nil
 }
