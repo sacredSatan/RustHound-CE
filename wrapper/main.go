@@ -256,7 +256,7 @@ func printErrorBanner(execDir string) {
 		fmt.Printf("  - %s\n", logFileName)
 	}
 	fmt.Println("")
-	fmt.Println("Please send the files securely to Permiso support. The file contains")
+	fmt.Println("Please send the files securely to Permiso support. The files contain")
 	fmt.Println("execution logs that will help our threat research and engineering")
 	fmt.Println("teams troubleshoot issues.")
 	fmt.Println("=====================================================================")
@@ -278,7 +278,7 @@ func printErrorBanner(execDir string) {
 			fmt.Fprintf(logFile, "  - %s\n", logFileName)
 		}
 		fmt.Fprintln(logFile, "")
-		fmt.Fprintln(logFile, "Please send the files securely to Permiso support. The file contains")
+		fmt.Fprintln(logFile, "Please send the files securely to Permiso support. The files contain")
 		fmt.Fprintln(logFile, "execution logs that will help our threat research and engineering")
 		fmt.Fprintln(logFile, "teams troubleshoot issues.")
 		fmt.Fprintln(logFile, "=====================================================================")
