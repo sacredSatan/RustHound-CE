@@ -297,7 +297,7 @@ func SaveSummaryToFile(summary *Summary, outputPath string) error {
 }
 
 // CompressOutputAndCleanup compresses all files in the output directory into a zip file
-// and removes the original files, keeping only the summary.json file
+// and removes the original files, keeping only the permiso_security_findings.json file and log file
 func CompressOutputAndCleanup(outputDir string, debug bool) error {
 	if debug {
 		logPrintf("DEBUG: Compressing output files in %s\n", outputDir)
@@ -376,7 +376,7 @@ func CompressOutputAndCleanup(outputDir string, debug bool) error {
 
 		// Add to list of files to remove, but keep summary.json and the log file
 		baseName := filepath.Base(path)
-		if baseName != "summary.json" && !strings.Contains(baseName, "permiso_ad_scanner_") {
+		if baseName != "permiso_security_findings.json" && !strings.Contains(baseName, "permiso_ad_scanner_") {
 			filesToRemove = append(filesToRemove, path)
 		}
 
@@ -428,7 +428,7 @@ func CompressOutputAndCleanup(outputDir string, debug bool) error {
 	// Close the zip writer before removing files
 	zipWriter.Close()
 
-	// Remove the original files (except summary.json and log file)
+	// Remove the original files (except security findings and log file)
 	for _, fileToRemove := range filesToRemove {
 		err := os.Remove(fileToRemove)
 		if err != nil {
@@ -441,7 +441,7 @@ func CompressOutputAndCleanup(outputDir string, debug bool) error {
 	}
 
 	logPrintf("Archive created: %s\n", archiveName)
-	logPrintf("Original files removed, keeping only summary.json, log file, and archive\n")
+	logPrintf("Original files removed, keeping only permiso_security_findings.json, log file, and archive\n")
 
 	return nil
 }

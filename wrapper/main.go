@@ -154,7 +154,7 @@ func printHelp() {
 func printSuccessBanner(execDir string) {
 	// Get list of important files
 	zipFile := ""
-	summaryFile := ""
+	findingsFile := ""
 	logFileName := ""
 
 	// Find the ZIP, summary, and log files
@@ -164,8 +164,8 @@ func printSuccessBanner(execDir string) {
 			name := file.Name()
 			if strings.HasPrefix(name, "permiso_ad_scanner_results_") && strings.HasSuffix(name, ".zip") {
 				zipFile = name
-			} else if name == "summary.json" {
-				summaryFile = name
+			} else if name == "permiso_security_findings.json" {
+				findingsFile = name
 			} else if strings.HasPrefix(name, "permiso_ad_scanner_") && strings.HasSuffix(name, ".log") {
 				logFileName = name
 			}
@@ -180,8 +180,8 @@ func printSuccessBanner(execDir string) {
 	if zipFile != "" {
 		fmt.Printf("  - %s\n", zipFile)
 	}
-	if summaryFile != "" {
-		fmt.Printf("  - %s\n", summaryFile)
+	if findingsFile != "" {
+		fmt.Printf("  - %s\n", findingsFile)
 	}
 	if logFileName != "" {
 		fmt.Printf("  - %s\n", logFileName)
@@ -203,8 +203,8 @@ func printSuccessBanner(execDir string) {
 		if zipFile != "" {
 			fmt.Fprintf(logFile, "  - %s\n", zipFile)
 		}
-		if summaryFile != "" {
-			fmt.Fprintf(logFile, "  - %s\n", summaryFile)
+		if findingsFile != "" {
+			fmt.Fprintf(logFile, "  - %s\n", findingsFile)
 		}
 		if logFileName != "" {
 			fmt.Fprintf(logFile, "  - %s\n", logFileName)
@@ -222,7 +222,7 @@ func printSuccessBanner(execDir string) {
 func printErrorBanner(execDir string) {
 	// Get list of important files
 	zipFile := ""
-	summaryFile := ""
+	findingsFile := ""
 	logFileName := ""
 
 	// Find the ZIP, summary, and log files
@@ -232,8 +232,8 @@ func printErrorBanner(execDir string) {
 			name := file.Name()
 			if strings.HasPrefix(name, "permiso_ad_scanner_results_") && strings.HasSuffix(name, ".zip") {
 				zipFile = name
-			} else if name == "summary.json" {
-				summaryFile = name
+			} else if name == "permiso_security_findings.json" {
+				findingsFile = name
 			} else if strings.HasPrefix(name, "permiso_ad_scanner_") && strings.HasSuffix(name, ".log") {
 				logFileName = name
 			}
@@ -248,8 +248,8 @@ func printErrorBanner(execDir string) {
 	if zipFile != "" {
 		fmt.Printf("  - %s\n", zipFile)
 	}
-	if summaryFile != "" {
-		fmt.Printf("  - %s\n", summaryFile)
+	if findingsFile != "" {
+		fmt.Printf("  - %s\n", findingsFile)
 	}
 	if logFileName != "" {
 		fmt.Printf("  - %s\n", logFileName)
@@ -270,8 +270,8 @@ func printErrorBanner(execDir string) {
 		if zipFile != "" {
 			fmt.Fprintf(logFile, "  - %s\n", zipFile)
 		}
-		if summaryFile != "" {
-			fmt.Fprintf(logFile, "  - %s\n", summaryFile)
+		if findingsFile != "" {
+			fmt.Fprintf(logFile, "  - %s\n", findingsFile)
 		}
 		if logFileName != "" {
 			fmt.Fprintf(logFile, "  - %s\n", logFileName)
@@ -625,7 +625,7 @@ func main() {
 		logErrorf("Error during post-processing: %v\n", err)
 	} else {
 		// Create summary file in the execution directory
-		summaryPath := filepath.Join(execDir, "summary.json")
+		summaryPath := filepath.Join(execDir, "permiso_security_findings.json")
 		err = SaveSummaryToFile(summary, summaryPath)
 		if err != nil {
 			hasErrors = true
