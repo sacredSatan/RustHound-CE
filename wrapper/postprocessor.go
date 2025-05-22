@@ -255,20 +255,6 @@ func processUsersForSecurityIssues(userData []any, findings *[]SecurityFinding, 
 					user.Properties.Name, lastActiveTime.Format("2006-01-02"))
 			}
 		}
-
-		// Rule 2: Guest accounts with password not required
-		if strings.Contains(strings.ToLower(user.Properties.Name), "guest") && user.Properties.PasswordNotRequired {
-			*findings = append(*findings, SecurityFinding{
-				Type:        "insecure_guest",
-				Username:    user.Properties.Name,
-				Description: "Guest account with 'password not required' flag set",
-				Severity:    "high",
-				FoundIn:     filepath.Base(sourcePath),
-			})
-			if config.Debug {
-				logPrintf("DEBUG: Found guest account with no password required: %s\n", user.Properties.Name)
-			}
-		}
 	}
 
 	if config.Debug {

@@ -642,15 +642,10 @@ func main() {
 		logPrintf("- Processing time: %s\n", summary.ProcessingTime)
 
 		fmt.Println("")
-		logPrintln("Security findings:")
-		for _, finding := range summary.SecurityFindings {
-			logPrintf("- %s: %s\n", finding.Type, finding.Description)
-		}
-
 		// Print findings summary by category
 		categoryCounts := GetCategorySummary(summary.SecurityFindings)
 		fmt.Println("")
-		logPrintln("Findings summary by category:")
+		logPrintln("Security findings summary:")
 		if len(categoryCounts) == 0 {
 			logPrintln("No security issues found.")
 		} else {
