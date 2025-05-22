@@ -388,8 +388,9 @@ func CompressOutputAndCleanup(outputDir string, debug bool) error {
 			logPrintf("DEBUG: Added file to archive: %s\n", relPath)
 		}
 
-		// Add to list of files to remove, but keep summary.json
-		if filepath.Base(path) != "summary.json" {
+		// Add to list of files to remove, but keep summary.json and the log file
+		baseName := filepath.Base(path)
+		if baseName != "summary.json" && !strings.Contains(baseName, "permiso_ad_scanner_") {
 			filesToRemove = append(filesToRemove, path)
 		}
 
@@ -400,10 +401,48 @@ func CompressOutputAndCleanup(outputDir string, debug bool) error {
 		return fmt.Errorf("error walking directory for compression: %v", err)
 	}
 
+	// Make sure we include the current log file (which may still be open)
+	if logFile != nil && logFilePath != "" {
+		// Create a copy of the log file to include in the zip
+		relPath, err := filepath.Rel(outputDir, logFilePath)
+		if err != nil {
+			relPath = filepath.Base(logFilePath)
+		}
+
+		// Sync the log file to ensure all data is written
+		logFile.Sync()
+
+		// Read the log file
+		data, err := os.ReadFile(logFilePath)
+		if err != nil {
+			if debug {
+				logPrintf("DEBUG: Error reading log file for compression: %v\n", err)
+			}
+		} else {
+			// Create zip entry for the log file
+			zipEntry, err := zipWriter.Create(relPath)
+			if err != nil {
+				if debug {
+					logPrintf("DEBUG: Error creating zip entry for log file: %v\n", err)
+				}
+			} else {
+				// Write log file content to zip
+				_, err = zipEntry.Write(data)
+				if err != nil {
+					if debug {
+						logPrintf("DEBUG: Error writing log file to zip: %v\n", err)
+					}
+				} else if debug {
+					logPrintf("DEBUG: Added log file to archive: %s\n", relPath)
+				}
+			}
+		}
+	}
+
 	// Close the zip writer before removing files
 	zipWriter.Close()
 
-	// Remove the original files (except summary.json)
+	// Remove the original files (except summary.json and log file)
 	for _, fileToRemove := range filesToRemove {
 		err := os.Remove(fileToRemove)
 		if err != nil {
@@ -416,7 +455,7 @@ func CompressOutputAndCleanup(outputDir string, debug bool) error {
 	}
 
 	logPrintf("Archive created: %s\n", archiveName)
-	logPrintf("Original files removed, keeping only summary.json and archive\n")
+	logPrintf("Original files removed, keeping only summary.json, log file, and archive\n")
 
 	return nil
 }

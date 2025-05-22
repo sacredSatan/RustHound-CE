@@ -7,23 +7,81 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
 
-// logPrintln is a wrapper for fmt.Println that prefixes with "[Permiso] "
+// Global log file
+var (
+	logFile     *os.File
+	logFilePath string
+	logMutex    sync.Mutex
+)
+
+// initLogFile creates a log file in the output directory
+func initLogFile(outputDir string) error {
+	// Create timestamp for log file name
+	timestamp := time.Now().Format("20060102_150405")
+	logFilePath = filepath.Join(outputDir, fmt.Sprintf("permiso_ad_scanner_%s.log", timestamp))
+
+	// Create the log file
+	var err error
+	logFile, err = os.Create(logFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to create log file: %v", err)
+	}
+
+	// Log initial message
+	fmt.Fprintf(logFile, "Permiso AD Scanner Log - Started at %s\n", time.Now().Format("2006-01-02 15:04:05"))
+	return nil
+}
+
+// closeLogFile closes the log file
+func closeLogFile() {
+	if logFile != nil {
+		logFile.Close()
+	}
+}
+
+// logPrintln is a wrapper for fmt.Println that prefixes with "[Permiso] " and also logs to file
 func logPrintln(a ...interface{}) {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
 	args := []interface{}{"[Permiso]"}
 	args = append(args, a...)
 	fmt.Println(args...)
+
+	// Also log to file if available
+	if logFile != nil {
+		fmt.Fprintln(logFile, args...)
+	}
 }
 
-// logPrintf is a wrapper for fmt.Printf that prefixes with "[Permiso] "
+// logPrintf is a wrapper for fmt.Printf that prefixes with "[Permiso] " and also logs to file
 func logPrintf(format string, a ...interface{}) {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
 	fmt.Printf("[Permiso] "+format, a...)
+
+	// Also log to file if available
+	if logFile != nil {
+		fmt.Fprintf(logFile, "[Permiso] "+format, a...)
+	}
 }
 
-// logErrorf is a wrapper for fmt.Fprintf(os.Stderr) that prefixes with "[Permiso] "
+// logErrorf is a wrapper for fmt.Fprintf(os.Stderr) that prefixes with "[Permiso] " and also logs to file
 func logErrorf(format string, a ...interface{}) {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
 	fmt.Fprintf(os.Stderr, "[Permiso] "+format, a...)
+
+	// Also log to file if available
+	if logFile != nil {
+		fmt.Fprintf(logFile, "[Permiso] "+format, a...)
+	}
 }
 
 // printBanner displays a welcome banner with information about the tool
@@ -88,6 +146,70 @@ func printHelp() {
 	fmt.Println("  - Security findings will be summarized and saved to summary.json")
 	fmt.Println("  - all files except summary.json will be compressed into a zip archive")
 	fmt.Println("  - Category summaries for security findings are displayed after processing")
+}
+
+// printSuccessBanner displays a banner for successful execution
+func printSuccessBanner() {
+	fmt.Println("\n====================================================================")
+	fmt.Println("Permiso AD Scanner completed successfully!")
+	fmt.Println("")
+	fmt.Println("All AD information has been collected and analyzed.")
+	fmt.Println("See the summary.json file and the zip archive for results.")
+	fmt.Println("=====================================================================")
+
+	// Also log to file if available
+	if logFile != nil {
+		fmt.Fprintln(logFile, "\n====================================================================")
+		fmt.Fprintln(logFile, "Permiso AD Scanner completed successfully!")
+		fmt.Fprintln(logFile, "")
+		fmt.Fprintln(logFile, "All AD information has been collected and analyzed.")
+		fmt.Fprintln(logFile, "See the summary.json file and the zip archive for results.")
+		fmt.Fprintln(logFile, "=====================================================================")
+	}
+}
+
+// printErrorBanner displays a banner for execution with errors
+func printErrorBanner() {
+	fmt.Println("\n====================================================================")
+	fmt.Println("Permiso AD Scanner completed with ERRORS!")
+	fmt.Println("")
+	fmt.Println("The scanning process encountered issues during execution.")
+	fmt.Println("Check the log file and error messages for more details.")
+	fmt.Println("Partial results may be available in the output directory.")
+	fmt.Println("=====================================================================")
+
+	// Also log to file if available
+	if logFile != nil {
+		fmt.Fprintln(logFile, "\n====================================================================")
+		fmt.Fprintln(logFile, "Permiso AD Scanner completed with ERRORS!")
+		fmt.Fprintln(logFile, "")
+		fmt.Fprintln(logFile, "The scanning process encountered issues during execution.")
+		fmt.Fprintln(logFile, "Check the log file and error messages for more details.")
+		fmt.Fprintln(logFile, "Partial results may be available in the output directory.")
+		fmt.Fprintln(logFile, "=====================================================================")
+	}
+}
+
+// sanitizeArgs removes sensitive information like passwords from command line arguments
+func sanitizeArgs(args []string) []string {
+	sanitized := make([]string, len(args))
+	copy(sanitized, args)
+
+	// Check for password parameters
+	for i, arg := range sanitized {
+		// Handle format: -p password or --ldappassword password
+		if (arg == "-p" || arg == "--ldappassword") && i+1 < len(sanitized) {
+			sanitized[i+1] = "[REDACTED]"
+		}
+
+		// Handle format: -p=password or --ldappassword=password
+		if strings.HasPrefix(arg, "-p=") || strings.HasPrefix(arg, "--ldappassword=") {
+			parts := strings.SplitN(arg, "=", 2)
+			sanitized[i] = parts[0] + "=[REDACTED]"
+		}
+	}
+
+	return sanitized
 }
 
 func main() {
@@ -161,6 +283,20 @@ func main() {
 		}
 	}
 
+	// Ensure output directory exists
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		logErrorf("Error creating output directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Initialize log file
+	if err := initLogFile(outputDir); err != nil {
+		logErrorf("Failed to initialize log file: %v\n", err)
+		// Continue without file logging
+	} else {
+		defer closeLogFile()
+	}
+
 	// Filter out -z or --zip arguments
 	filteredArgs := make([]string, 0, len(argsToPass))
 	for i := 0; i < len(argsToPass); i++ {
@@ -174,17 +310,12 @@ func main() {
 	}
 	argsToPass = filteredArgs
 
-	// Ensure output directory exists
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		logErrorf("Error creating output directory: %v\n", err)
-		os.Exit(1)
-	}
-
 	// Run prerequisite checks if not skipped
 	if !*skipPrerequisites {
 		checksPassed := runPrerequisiteChecks(argsToPass, outputDir, *minDiskSpace, *maxMemory)
 		if !checksPassed {
 			logErrorf("\nOne or more prerequisite checks failed. Fix the issues or use --skip-checks to bypass.\n")
+			printErrorBanner()
 			os.Exit(1)
 		}
 	}
@@ -203,7 +334,7 @@ func main() {
 	cmd.Stderr = os.Stderr
 
 	// Execute RustHound-CE in the background so we can monitor it
-	logPrintln("\nExecuting RustHound-CE with arguments:", strings.Join(argsToPass, " "))
+	logPrintln("\nExecuting RustHound-CE with arguments:", strings.Join(sanitizeArgs(argsToPass), " "))
 
 	// Resource monitoring information
 	if *monitoringEnabled {
@@ -217,6 +348,7 @@ func main() {
 	err := cmd.Start()
 	if err != nil {
 		logErrorf("Error starting RustHound-CE: %v\n", err)
+		printErrorBanner()
 		os.Exit(1)
 	}
 
@@ -243,8 +375,12 @@ func main() {
 		monitor.Stop()
 	}
 
+	// Track overall success/failure
+	hasErrors := false
+
 	// Check if process was terminated due to resource constraints
 	if err != nil {
+		hasErrors = true
 		if _, ok := err.(*exec.ExitError); ok {
 			logErrorf("RustHound-CE exited with an error: %v\n", err)
 		} else {
@@ -252,6 +388,7 @@ func main() {
 			// If the error contains "killed" it was likely terminated by our monitor
 			if strings.Contains(err.Error(), "killed") {
 				logErrorf("Process was terminated due to resource constraints, exiting wrapper\n")
+				printErrorBanner()
 				os.Exit(1)
 			}
 		}
@@ -264,12 +401,14 @@ func main() {
 
 	summary, err := ProcessRustHoundOutput(outputDir, *debugMode)
 	if err != nil {
+		hasErrors = true
 		logErrorf("Error during post-processing: %v\n", err)
 	} else {
 		// Create summary file in the output directory
 		summaryPath := filepath.Join(outputDir, "summary.json")
 		err = SaveSummaryToFile(summary, summaryPath)
 		if err != nil {
+			hasErrors = true
 			logErrorf("Error saving summary file: %v\n", err)
 		} else {
 			logPrintf("Summary saved to %s\n", summaryPath)
@@ -303,6 +442,7 @@ func main() {
 			logPrintln("\nCompressing output files and cleaning up...")
 			err = CompressOutputAndCleanup(outputDir, *debugMode)
 			if err != nil {
+				hasErrors = true
 				logErrorf("Error compressing output files: %v\n", err)
 			}
 		}
@@ -331,10 +471,19 @@ func main() {
 	})
 
 	if err != nil {
+		hasErrors = true
 		logErrorf("Error listing files: %v\n", err)
+		printErrorBanner()
 		os.Exit(1)
 	}
 
 	logPrintf("\nSummary: Generated %d files, total size %d bytes (%.2f MB)\n",
 		fileCount, totalBytes, float64(totalBytes)/(1024*1024))
+
+	// Print success or error banner based on the result
+	if !hasErrors {
+		printSuccessBanner()
+	} else {
+		printErrorBanner()
+	}
 }
