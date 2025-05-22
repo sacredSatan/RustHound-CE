@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -216,6 +218,28 @@ func sanitizeArgs(args []string) []string {
 	return sanitized
 }
 
+// detectErrorsInOutput checks if the output contains error messages
+func detectErrorsInOutput(output string) bool {
+	errorPatterns := []string{
+		"[ERROR rusthound_ce",
+		"ERROR rusthound_ce",
+		"Failed to authenticate",
+		"Error:",
+		"error:",
+		"Fatal:",
+		"fatal:",
+		"Operation failed",
+	}
+
+	for _, pattern := range errorPatterns {
+		if strings.Contains(output, pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func main() {
 	// Display the banner
 	printBanner()
@@ -333,10 +357,27 @@ func main() {
 		cmd.Args = append(cmd.Args, argsToPass...)
 	}
 
-	// Set up the command to use the same standard input, output, and error as this program
+	// Create a pipe for capturing stderr while still showing it to the user
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		logErrorf("Error creating stderr pipe: %v\n", err)
+		printErrorBanner()
+		os.Exit(1)
+	}
+
+	// Create a pipe for capturing stdout while still showing it to the user
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		logErrorf("Error creating stdout pipe: %v\n", err)
+		printErrorBanner()
+		os.Exit(1)
+	}
+
+	// Set up the command to use the user's standard input
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+
+	// Track if we detect error messages in the output
+	errorDetected := false
 
 	// Execute RustHound-CE in the background so we can monitor it
 	fmt.Println("")
@@ -351,7 +392,7 @@ func main() {
 	}
 
 	// Start the process
-	err := cmd.Start()
+	err = cmd.Start()
 	if err != nil {
 		logErrorf("Error starting RustHound-CE: %v\n", err)
 		printErrorBanner()
@@ -361,7 +402,9 @@ func main() {
 	// Get the process ID for monitoring
 	pid := cmd.Process.Pid
 	logPrintf("RustHound-CE started with PID: %d\n", pid)
-	logErrorf("DEBUG: Process details - PID: %d, Process: %+v\n", pid, cmd.Process)
+	if *debugMode {
+		logErrorf("DEBUG: Process details - PID: %d, Process: %+v\n", pid, cmd.Process)
+	}
 
 	// Set up resource monitoring if enabled
 	var monitor *ResourceMonitor
@@ -370,8 +413,24 @@ func main() {
 		monitor.StartMonitoring()
 	}
 
+	// Start a goroutine to read stderr and detect errors
+	var stderrBuffer bytes.Buffer
+	go func() {
+		tee := io.TeeReader(stderrPipe, os.Stderr)
+		io.Copy(&stderrBuffer, tee)
+	}()
+
+	// Start a goroutine to read stdout
+	var stdoutBuffer bytes.Buffer
+	go func() {
+		tee := io.TeeReader(stdoutPipe, os.Stdout)
+		io.Copy(&stdoutBuffer, tee)
+	}()
+
 	// Wait for the command to complete
-	// logErrorf("DEBUG: Waiting for process to complete...\n")
+	if *debugMode {
+		logErrorf("DEBUG: Waiting for process to complete...\n")
+	}
 	err = cmd.Wait()
 	if err != nil {
 		logErrorf("DEBUG: Process Wait() completed with error: %v\n", err)
@@ -379,8 +438,18 @@ func main() {
 
 	// Stop monitoring
 	if *monitoringEnabled && monitor != nil {
-		// logErrorf("DEBUG: Stopping resource monitor\n")
+		if *debugMode {
+			logErrorf("DEBUG: Stopping resource monitor\n")
+		}
 		monitor.Stop()
+	}
+
+	// Check for error patterns in the captured stderr
+	stderrOutput := stderrBuffer.String()
+	stdoutOutput := stdoutBuffer.String()
+	if detectErrorsInOutput(stderrOutput) || detectErrorsInOutput(stdoutOutput) {
+		errorDetected = true
+		logErrorf("Detected error messages in the RustHound-CE output\n")
 	}
 
 	// Track overall success/failure
@@ -404,13 +473,24 @@ func main() {
 			}
 		}
 	} else {
-		fmt.Println("")
-		logPrintln("RustHound-CE completed successfully.")
+		// Even if the process completed with a zero exit code, check if we detected errors in the output
+		if errorDetected {
+			hasErrors = true
+			fmt.Println("")
+			logErrorf("RustHound-CE completed with error messages in output\n")
+		} else {
+			fmt.Println("")
+			logPrintln("RustHound-CE completed successfully.")
+		}
 	}
 
-	// Run post-processing on the output files
-	fmt.Println("")
-	logPrintln("Performing post-processing on generated files...")
+	if hasErrors {
+		fmt.Println("")
+		logPrintln("RustHound-CE completed with errors, performing post-processing on partial results...")
+	} else {
+		fmt.Println("")
+		logPrintln("Performing post-processing on generated files...")
+	}
 
 	summary, err := ProcessRustHoundOutput(outputDir, *debugMode)
 	if err != nil {
