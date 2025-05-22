@@ -9,8 +9,37 @@ import (
 	"strings"
 )
 
+// logPrintln is a wrapper for fmt.Println that prefixes with "[Permiso] "
+func logPrintln(a ...interface{}) {
+	args := []interface{}{"[Permiso]"}
+	args = append(args, a...)
+	fmt.Println(args...)
+}
+
+// logPrintf is a wrapper for fmt.Printf that prefixes with "[Permiso] "
+func logPrintf(format string, a ...interface{}) {
+	fmt.Printf("[Permiso] "+format, a...)
+}
+
+// logErrorf is a wrapper for fmt.Fprintf(os.Stderr) that prefixes with "[Permiso] "
+func logErrorf(format string, a ...interface{}) {
+	fmt.Fprintf(os.Stderr, "[Permiso] "+format, a...)
+}
+
+// printBanner displays a welcome banner with information about the tool
+func printBanner() {
+	fmt.Println("====================================================================")
+	fmt.Println("Running permiso-ad-scanner-container")
+	fmt.Println("")
+	fmt.Println("Initial version of Permiso's AD scanner. It will collect diagnostics")
+	fmt.Println("using the Rusthound open source utility, and machine/OS/network")
+	fmt.Println("diagnostics to enable a fully deployed AD scanner.")
+	fmt.Println("=====================================================================")
+}
+
 // printHelp displays the usage information for both the wrapper and RustHound-CE
 func printHelp() {
+	// Keep the help output clean without the prefix
 	fmt.Println("rusthound-wrapper - some description")
 	fmt.Println("")
 	fmt.Println("WRAPPER OPTIONS:")
@@ -62,6 +91,9 @@ func printHelp() {
 }
 
 func main() {
+	// Display the banner
+	printBanner()
+
 	// Check for "help" command first
 	if len(os.Args) > 1 && (os.Args[1] == "help" || os.Args[1] == "--help" || os.Args[1] == "-h") {
 		printHelp()
@@ -107,7 +139,7 @@ func main() {
 		// Delimiter found, parse only the wrapper flags before the delimiter
 		if delimiterIndex > 1 {
 			if err := wrapperFlags.Parse(os.Args[1:delimiterIndex]); err != nil {
-				fmt.Fprintf(os.Stderr, "Error parsing wrapper flags: %v\n", err)
+				logErrorf("Error parsing wrapper flags: %v\n", err)
 				wrapperFlags.Usage()
 				os.Exit(1)
 			}
@@ -119,7 +151,7 @@ func main() {
 	}
 
 	// Default output directory where RustHound-CE stores its files
-	outputDir := "./output"
+	outputDir := "/app/output"
 
 	// Check for output directory in rusthound args
 	for i := 0; i < len(argsToPass)-1; i++ {
@@ -134,7 +166,7 @@ func main() {
 	for i := 0; i < len(argsToPass); i++ {
 		// Skip -z or --zip
 		if argsToPass[i] == "-z" || argsToPass[i] == "--zip" {
-			fmt.Fprintf(os.Stderr, "INFO: Removing %s argument from rusthound command\n", argsToPass[i])
+			logPrintf("INFO: Removing %s argument from rusthound command, compression is handled by permiso-ad-scanner-container\n", argsToPass[i])
 			continue
 		}
 
@@ -144,7 +176,7 @@ func main() {
 
 	// Ensure output directory exists
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
+		logErrorf("Error creating output directory: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -152,7 +184,7 @@ func main() {
 	if !*skipPrerequisites {
 		checksPassed := runPrerequisiteChecks(argsToPass, outputDir, *minDiskSpace, *maxMemory)
 		if !checksPassed {
-			fmt.Fprintf(os.Stderr, "\nOne or more prerequisite checks failed. Fix the issues or use --skip-checks to bypass.\n")
+			logErrorf("\nOne or more prerequisite checks failed. Fix the issues or use --skip-checks to bypass.\n")
 			os.Exit(1)
 		}
 	}
@@ -171,27 +203,27 @@ func main() {
 	cmd.Stderr = os.Stderr
 
 	// Execute RustHound-CE in the background so we can monitor it
-	fmt.Println("\nExecuting RustHound-CE with arguments:", strings.Join(argsToPass, " "))
+	logPrintln("\nExecuting RustHound-CE with arguments:", strings.Join(argsToPass, " "))
 
 	// Resource monitoring information
 	if *monitoringEnabled {
-		fmt.Printf("Resource monitoring enabled:\n")
-		fmt.Printf("- Minimum disk space: %d MB\n", *minDiskSpace)
-		fmt.Printf("- Maximum memory usage: %d MB\n", *maxMemory)
-		fmt.Printf("- Check interval: %d seconds\n", *checkInterval)
+		logPrintln("Resource monitoring enabled:")
+		logPrintf("- Minimum disk space: %d MB\n", *minDiskSpace)
+		logPrintf("- Maximum memory usage: %d MB\n", *maxMemory)
+		logPrintf("- Check interval: %d seconds\n", *checkInterval)
 	}
 
 	// Start the process
 	err := cmd.Start()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error starting RustHound-CE: %v\n", err)
+		logErrorf("Error starting RustHound-CE: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Get the process ID for monitoring
 	pid := cmd.Process.Pid
-	fmt.Printf("RustHound-CE started with PID: %d\n", pid)
-	fmt.Fprintf(os.Stderr, "DEBUG: Process details - PID: %d, Process: %+v\n", pid, cmd.Process)
+	logPrintf("RustHound-CE started with PID: %d\n", pid)
+	logErrorf("DEBUG: Process details - PID: %d, Process: %+v\n", pid, cmd.Process)
 
 	// Set up resource monitoring if enabled
 	var monitor *ResourceMonitor
@@ -201,83 +233,83 @@ func main() {
 	}
 
 	// Wait for the command to complete
-	fmt.Fprintf(os.Stderr, "DEBUG: Waiting for process to complete...\n")
+	logErrorf("DEBUG: Waiting for process to complete...\n")
 	err = cmd.Wait()
-	fmt.Fprintf(os.Stderr, "DEBUG: Process Wait() completed with error: %v\n", err)
+	logErrorf("DEBUG: Process Wait() completed with error: %v\n", err)
 
 	// Stop monitoring
 	if *monitoringEnabled && monitor != nil {
-		fmt.Fprintf(os.Stderr, "DEBUG: Stopping resource monitor\n")
+		logErrorf("DEBUG: Stopping resource monitor\n")
 		monitor.Stop()
 	}
 
 	// Check if process was terminated due to resource constraints
 	if err != nil {
 		if _, ok := err.(*exec.ExitError); ok {
-			fmt.Fprintf(os.Stderr, "RustHound-CE exited with an error: %v\n", err)
+			logErrorf("RustHound-CE exited with an error: %v\n", err)
 		} else {
-			fmt.Fprintf(os.Stderr, "Error executing RustHound-CE: %v\n", err)
+			logErrorf("Error executing RustHound-CE: %v\n", err)
 			// If the error contains "killed" it was likely terminated by our monitor
 			if strings.Contains(err.Error(), "killed") {
-				fmt.Fprintf(os.Stderr, "Process was terminated due to resource constraints, exiting wrapper\n")
+				logErrorf("Process was terminated due to resource constraints, exiting wrapper\n")
 				os.Exit(1)
 			}
 		}
 	} else {
-		fmt.Println("\nRustHound-CE completed successfully.")
+		logPrintln("\nRustHound-CE completed successfully.")
 	}
 
 	// Run post-processing on the output files
-	fmt.Println("\nPerforming post-processing on generated files...")
+	logPrintln("\nPerforming post-processing on generated files...")
 
 	summary, err := ProcessRustHoundOutput(outputDir, *debugMode)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error during post-processing: %v\n", err)
+		logErrorf("Error during post-processing: %v\n", err)
 	} else {
 		// Create summary file in the output directory
 		summaryPath := filepath.Join(outputDir, "summary.json")
 		err = SaveSummaryToFile(summary, summaryPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error saving summary file: %v\n", err)
+			logErrorf("Error saving summary file: %v\n", err)
 		} else {
-			fmt.Printf("Summary saved to %s\n", summaryPath)
+			logPrintf("Summary saved to %s\n", summaryPath)
 		}
 
 		// Display summary information
-		fmt.Printf("\nPost-processing results:\n")
-		fmt.Printf("- Total files processed: %d\n", summary.TotalFiles)
-		fmt.Printf("- Total size: %.2f MB\n", float64(summary.TotalBytes)/(1024*1024))
-		fmt.Printf("- Processing time: %s\n", summary.ProcessingTime)
+		logPrintln("\nPost-processing results:")
+		logPrintf("- Total files processed: %d\n", summary.TotalFiles)
+		logPrintf("- Total size: %.2f MB\n", float64(summary.TotalBytes)/(1024*1024))
+		logPrintf("- Processing time: %s\n", summary.ProcessingTime)
 
-		fmt.Printf("\nSecurity findings:\n")
+		logPrintln("\nSecurity findings:")
 		for _, finding := range summary.SecurityFindings {
-			fmt.Printf("- %s: %s\n", finding.Type, finding.Description)
+			logPrintf("- %s: %s\n", finding.Type, finding.Description)
 		}
 
 		// Print findings summary by category
 		categoryCounts := GetCategorySummary(summary.SecurityFindings)
-		fmt.Printf("\nFindings summary by category:\n")
+		logPrintln("\nFindings summary by category:")
 		if len(categoryCounts) == 0 {
-			fmt.Println("No security issues found.")
+			logPrintln("No security issues found.")
 		} else {
 			for category, count := range categoryCounts {
-				fmt.Printf("- %s: %d\n", category, count)
+				logPrintf("- %s: %d\n", category, count)
 			}
-			fmt.Printf("\nTotal security issues found: %d\n", len(summary.SecurityFindings))
+			logPrintf("\nTotal security issues found: %d\n", len(summary.SecurityFindings))
 		}
 
 		// Compress output files and clean up if enabled
 		if *compressOutput {
-			fmt.Println("\nCompressing output files and cleaning up...")
+			logPrintln("\nCompressing output files and cleaning up...")
 			err = CompressOutputAndCleanup(outputDir, *debugMode)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error compressing output files: %v\n", err)
+				logErrorf("Error compressing output files: %v\n", err)
 			}
 		}
 	}
 
 	// List all files generated by RustHound-CE
-	fmt.Println("\nFiles generated by rusthound-wrapper:")
+	logPrintln("\nFiles generated by rusthound-wrapper:")
 
 	fileCount := 0
 	totalBytes := int64(0)
@@ -291,7 +323,7 @@ func main() {
 			if err != nil {
 				relPath = path
 			}
-			fmt.Printf("- %s (%d bytes)\n", relPath, info.Size())
+			logPrintf("- %s (%d bytes)\n", relPath, info.Size())
 			fileCount++
 			totalBytes += info.Size()
 		}
@@ -299,10 +331,10 @@ func main() {
 	})
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error listing files: %v\n", err)
+		logErrorf("Error listing files: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("\nSummary: Generated %d files, total size %d bytes (%.2f MB)\n",
+	logPrintf("\nSummary: Generated %d files, total size %d bytes (%.2f MB)\n",
 		fileCount, totalBytes, float64(totalBytes)/(1024*1024))
 }

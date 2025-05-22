@@ -26,13 +26,13 @@ func getProcessMemoryUsageMB(pid int, debug bool) (uint64, error) {
 	// Linux-specific implementation using /proc filesystem
 	procFile := fmt.Sprintf("/proc/%d/status", pid)
 	if debug {
-		fmt.Fprintf(os.Stderr, "DEBUG: Reading memory info from %s\n", procFile)
+		logErrorf("DEBUG: Reading memory info from %s\n", procFile)
 	}
 
 	data, err := os.ReadFile(procFile)
 	if err != nil {
 		if debug {
-			fmt.Fprintf(os.Stderr, "DEBUG: Error reading proc file: %v\n", err)
+			logErrorf("DEBUG: Error reading proc file: %v\n", err)
 		}
 		return 0, err
 	}
@@ -40,31 +40,31 @@ func getProcessMemoryUsageMB(pid int, debug bool) (uint64, error) {
 	// Parse the file to find memory usage (VmRSS)
 	lines := strings.Split(string(data), "\n")
 	if debug {
-		fmt.Fprintf(os.Stderr, "DEBUG: Proc file contains %d lines\n", len(lines))
+		logErrorf("DEBUG: Proc file contains %d lines\n", len(lines))
 	}
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "VmRSS:") {
 			if debug {
-				fmt.Fprintf(os.Stderr, "DEBUG: Found VmRSS line: %s\n", line)
+				logErrorf("DEBUG: Found VmRSS line: %s\n", line)
 			}
 			var memKB uint64
 			_, err := fmt.Sscanf(strings.TrimSpace(strings.TrimPrefix(line, "VmRSS:")), "%d kB", &memKB)
 			if err != nil {
 				if debug {
-					fmt.Fprintf(os.Stderr, "DEBUG: Failed to parse memory usage: %v\n", err)
+					logErrorf("DEBUG: Failed to parse memory usage: %v\n", err)
 				}
 				return 0, fmt.Errorf("failed to parse memory usage: %v", err)
 			}
 			if debug {
-				fmt.Fprintf(os.Stderr, "DEBUG: Calculated memory usage: %d KB (%d MB)\n", memKB, memKB/1024)
+				logErrorf("DEBUG: Calculated memory usage: %d KB (%d MB)\n", memKB, memKB/1024)
 			}
 			return memKB / 1024, nil // Convert KB to MB
 		}
 	}
 
 	if debug {
-		fmt.Fprintf(os.Stderr, "DEBUG: Couldn't find VmRSS in proc file\n")
+		logErrorf("DEBUG: Couldn't find VmRSS in proc file\n")
 	}
 	return 0, fmt.Errorf("couldn't find memory usage information")
 }
@@ -94,14 +94,14 @@ func getSystemMemoryInfoMB() (uint64, uint64, error) {
 // listProcessTree lists the process tree starting at the given PID
 func listProcessTree(pid int, debug bool) {
 	if debug {
-		fmt.Fprintf(os.Stderr, "DEBUG: Listing process tree for PID %d\n", pid)
+		logErrorf("DEBUG: Listing process tree for PID %d\n", pid)
 	}
 
 	// Check if process exists
 	_, err := os.FindProcess(pid)
 	if err != nil {
 		if debug {
-			fmt.Fprintf(os.Stderr, "DEBUG: Process %d not found: %v\n", pid, err)
+			logErrorf("DEBUG: Process %d not found: %v\n", pid, err)
 		}
 		return
 	}
@@ -111,18 +111,18 @@ func listProcessTree(pid int, debug bool) {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if debug {
-			fmt.Fprintf(os.Stderr, "DEBUG: Failed to run ps command: %v\n", err)
+			logErrorf("DEBUG: Failed to run ps command: %v\n", err)
 		}
 		return
 	}
 
 	lines := strings.Split(string(output), "\n")
 	if debug {
-		fmt.Fprintf(os.Stderr, "DEBUG: Found %d processes in system\n", len(lines)-1)
+		logErrorf("DEBUG: Found %d processes in system\n", len(lines)-1)
 
 		// Print header
-		fmt.Fprintf(os.Stderr, "DEBUG: Process tree:\n")
-		fmt.Fprintf(os.Stderr, "DEBUG: PID     PPID    CMD\n")
+		logErrorf("DEBUG: Process tree:\n")
+		logErrorf("DEBUG: PID     PPID    CMD\n")
 	}
 
 	// First, print the main process
@@ -131,7 +131,7 @@ func listProcessTree(pid int, debug bool) {
 		if len(fields) >= 3 {
 			processPid := strings.TrimSpace(fields[0])
 			if processPid == fmt.Sprintf("%d", pid) && debug {
-				fmt.Fprintf(os.Stderr, "DEBUG: %s\n", line)
+				logErrorf("DEBUG: %s\n", line)
 				break
 			}
 		}
@@ -143,7 +143,7 @@ func listProcessTree(pid int, debug bool) {
 		if len(fields) >= 3 {
 			processPpid := strings.TrimSpace(fields[1])
 			if processPpid == fmt.Sprintf("%d", pid) && debug {
-				fmt.Fprintf(os.Stderr, "DEBUG: %s\n", line)
+				logErrorf("DEBUG: %s\n", line)
 			}
 		}
 	}

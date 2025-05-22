@@ -34,18 +34,18 @@ func NewResourceMonitor(minDiskSpaceMB, maxMemoryUsageMB uint64, checkIntervalSe
 // logDebug prints a debug message only if debug mode is enabled
 func (r *ResourceMonitor) logDebug(format string, args ...interface{}) {
 	if r.Debug {
-		fmt.Fprintf(os.Stderr, "DEBUG: "+format+"\n", args...)
+		logErrorf("DEBUG: "+format+"\n", args...)
 	}
 }
 
 // terminateProcess attempts to kill the monitored process and exits the program
 func (r *ResourceMonitor) terminateProcess(reason string) {
-	fmt.Fprintf(os.Stderr, "Critical: %s. Terminating process.\n", reason)
+	logErrorf("Critical: %s. Terminating process.\n", reason)
 	r.logDebug("Attempting to kill process with PID: %d", r.Process.Pid)
 
 	err := r.Process.Kill()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: Failed to kill process: %v\n", err)
+		logErrorf("ERROR: Failed to kill process: %v\n", err)
 	} else {
 		r.logDebug("Process.Kill() returned without error")
 
@@ -73,7 +73,7 @@ func (r *ResourceMonitor) terminateProcess(reason string) {
 				// Try a direct syscall for SIGKILL
 				err = syscall.Kill(r.Process.Pid, syscall.SIGKILL)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "ERROR: Failed to send SIGKILL: %v\n", err)
+					logErrorf("ERROR: Failed to send SIGKILL: %v\n", err)
 				} else {
 					r.logDebug("SIGKILL sent successfully")
 
@@ -83,7 +83,7 @@ func (r *ResourceMonitor) terminateProcess(reason string) {
 					if err != nil {
 						r.logDebug("Process appears to be gone after SIGKILL")
 					} else {
-						fmt.Fprintf(os.Stderr, "WARNING: Process still exists even after SIGKILL! PID: %d\n", r.Process.Pid)
+						logErrorf("WARNING: Process still exists even after SIGKILL! PID: %d\n", r.Process.Pid)
 					}
 				}
 			}
@@ -96,7 +96,7 @@ func (r *ResourceMonitor) terminateProcess(reason string) {
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "INFO: Exiting wrapper after terminating process\n")
+	logErrorf("INFO: Exiting wrapper after terminating process\n")
 	os.Exit(1)
 }
 
@@ -112,7 +112,7 @@ func (r *ResourceMonitor) StartMonitoring() {
 				// Check available disk space
 				diskSpaceMB, err := getAvailableDiskSpaceMB(r.OutputDir)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: Failed to check disk space: %v\n", err)
+					logErrorf("Warning: Failed to check disk space: %v\n", err)
 				} else if diskSpaceMB < r.MinDiskSpaceMB {
 					reason := fmt.Sprintf("Available disk space (%d MB) is below minimum threshold (%d MB)",
 						diskSpaceMB, r.MinDiskSpaceMB)
@@ -122,7 +122,7 @@ func (r *ResourceMonitor) StartMonitoring() {
 				// Check memory usage
 				memUsageMB, err := getProcessMemoryUsageMB(r.Process.Pid, r.Debug)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: Failed to check memory usage: %v\n", err)
+					logErrorf("Warning: Failed to check memory usage: %v\n", err)
 				} else if memUsageMB > r.MaxMemoryUsageMB {
 					reason := fmt.Sprintf("Process memory usage (%d MB) exceeds maximum threshold (%d MB)",
 						memUsageMB, r.MaxMemoryUsageMB)
@@ -131,7 +131,7 @@ func (r *ResourceMonitor) StartMonitoring() {
 
 				// Only log resource check if debug is enabled
 				if r.Debug {
-					fmt.Printf("Resource check: Disk space: %d MB available, Memory usage: %d MB\n", diskSpaceMB, memUsageMB)
+					logPrintf("Resource check: Disk space: %d MB available, Memory usage: %d MB\n", diskSpaceMB, memUsageMB)
 				}
 
 			case <-r.StopMonitoring:
