@@ -33,9 +33,9 @@ WORKDIR /build/wrapper
 COPY *.go ./
 
 # Initialize a Go module and build the wrapper
-RUN go mod init rhwrapper && \
+RUN go mod init permiso-ad-scanner && \
     go mod tidy && \
-    go build -o rusthound-wrapper .
+    go build -o permiso-ad-scanner .
 
 # Final stage - using bookworm (Debian 12) for newer GLIBC version
 FROM debian:bookworm-slim
@@ -54,7 +54,7 @@ WORKDIR /app
 COPY --from=rust-builder /build/RustHound-CE/target/release/rusthound-ce /app/rusthound-ce
 
 # Copy Go wrapper from go-builder stage
-COPY --from=go-builder /build/wrapper/rusthound-wrapper /app/rusthound-wrapper
+COPY --from=go-builder /build/wrapper/permiso-ad-scanner /app/permiso-ad-scanner
 
 # Create output directory
 RUN mkdir -p /app/output
@@ -62,9 +62,9 @@ RUN mkdir -p /app/output
 # Create an entrypoint script that handles help command
 RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
     echo 'if [ "$1" = "help" ]; then' >> /app/entrypoint.sh && \
-    echo '  /app/rusthound-wrapper --help' >> /app/entrypoint.sh && \
+    echo '  /app/permiso-ad-scanner --help' >> /app/entrypoint.sh && \
     echo 'else' >> /app/entrypoint.sh && \
-    echo '  /app/rusthound-wrapper "$@"' >> /app/entrypoint.sh && \
+    echo '  /app/permiso-ad-scanner "$@"' >> /app/entrypoint.sh && \
     echo 'fi' >> /app/entrypoint.sh && \
     chmod +x /app/entrypoint.sh
 

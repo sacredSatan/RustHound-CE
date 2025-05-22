@@ -87,7 +87,7 @@ func logErrorf(format string, a ...interface{}) {
 // printBanner displays a welcome banner with information about the tool
 func printBanner() {
 	fmt.Println("====================================================================")
-	fmt.Println("Running permiso-ad-scanner-container")
+	fmt.Println("Running permiso-ad-scanner")
 	fmt.Println("")
 	fmt.Println("Initial version of Permiso's AD scanner. It will collect diagnostics")
 	fmt.Println("using the Rusthound open source utility, and machine/OS/network")
@@ -150,7 +150,8 @@ func printHelp() {
 
 // printSuccessBanner displays a banner for successful execution
 func printSuccessBanner() {
-	fmt.Println("\n====================================================================")
+	fmt.Println("")
+	fmt.Println("====================================================================")
 	fmt.Println("Permiso AD Scanner completed successfully!")
 	fmt.Println("")
 	fmt.Println("All AD information has been collected and analyzed.")
@@ -159,7 +160,8 @@ func printSuccessBanner() {
 
 	// Also log to file if available
 	if logFile != nil {
-		fmt.Fprintln(logFile, "\n====================================================================")
+		fmt.Println("")
+		fmt.Fprintln(logFile, "====================================================================")
 		fmt.Fprintln(logFile, "Permiso AD Scanner completed successfully!")
 		fmt.Fprintln(logFile, "")
 		fmt.Fprintln(logFile, "All AD information has been collected and analyzed.")
@@ -170,7 +172,8 @@ func printSuccessBanner() {
 
 // printErrorBanner displays a banner for execution with errors
 func printErrorBanner() {
-	fmt.Println("\n====================================================================")
+	fmt.Println("")
+	fmt.Println("====================================================================")
 	fmt.Println("Permiso AD Scanner completed with ERRORS!")
 	fmt.Println("")
 	fmt.Println("The scanning process encountered issues during execution.")
@@ -180,7 +183,8 @@ func printErrorBanner() {
 
 	// Also log to file if available
 	if logFile != nil {
-		fmt.Fprintln(logFile, "\n====================================================================")
+		fmt.Println("")
+		fmt.Fprintln(logFile, "====================================================================")
 		fmt.Fprintln(logFile, "Permiso AD Scanner completed with ERRORS!")
 		fmt.Fprintln(logFile, "")
 		fmt.Fprintln(logFile, "The scanning process encountered issues during execution.")
@@ -302,7 +306,7 @@ func main() {
 	for i := 0; i < len(argsToPass); i++ {
 		// Skip -z or --zip
 		if argsToPass[i] == "-z" || argsToPass[i] == "--zip" {
-			logPrintf("INFO: Removing %s argument from rusthound command, compression is handled by permiso-ad-scanner-container\n", argsToPass[i])
+			logPrintf("INFO: Removing %s argument from rusthound command, compression is handled by permiso-ad-scanner\n", argsToPass[i])
 			continue
 		}
 
@@ -314,7 +318,8 @@ func main() {
 	if !*skipPrerequisites {
 		checksPassed := runPrerequisiteChecks(argsToPass, outputDir, *minDiskSpace, *maxMemory)
 		if !checksPassed {
-			logErrorf("\nOne or more prerequisite checks failed. Fix the issues or use --skip-checks to bypass.\n")
+			fmt.Println("")
+			logErrorf("One or more prerequisite checks failed. Fix the issues or use --skip-checks to bypass.\n")
 			printErrorBanner()
 			os.Exit(1)
 		}
@@ -334,7 +339,8 @@ func main() {
 	cmd.Stderr = os.Stderr
 
 	// Execute RustHound-CE in the background so we can monitor it
-	logPrintln("\nExecuting RustHound-CE with arguments:", strings.Join(sanitizeArgs(argsToPass), " "))
+	fmt.Println("")
+	logPrintln("Executing RustHound-CE with arguments:", strings.Join(sanitizeArgs(argsToPass), " "))
 
 	// Resource monitoring information
 	if *monitoringEnabled {
@@ -365,13 +371,15 @@ func main() {
 	}
 
 	// Wait for the command to complete
-	logErrorf("DEBUG: Waiting for process to complete...\n")
+	// logErrorf("DEBUG: Waiting for process to complete...\n")
 	err = cmd.Wait()
-	logErrorf("DEBUG: Process Wait() completed with error: %v\n", err)
+	if err != nil {
+		logErrorf("DEBUG: Process Wait() completed with error: %v\n", err)
+	}
 
 	// Stop monitoring
 	if *monitoringEnabled && monitor != nil {
-		logErrorf("DEBUG: Stopping resource monitor\n")
+		// logErrorf("DEBUG: Stopping resource monitor\n")
 		monitor.Stop()
 	}
 
@@ -382,22 +390,27 @@ func main() {
 	if err != nil {
 		hasErrors = true
 		if _, ok := err.(*exec.ExitError); ok {
+			fmt.Println("")
 			logErrorf("RustHound-CE exited with an error: %v\n", err)
 		} else {
+			fmt.Println("")
 			logErrorf("Error executing RustHound-CE: %v\n", err)
 			// If the error contains "killed" it was likely terminated by our monitor
 			if strings.Contains(err.Error(), "killed") {
+				fmt.Println("")
 				logErrorf("Process was terminated due to resource constraints, exiting wrapper\n")
 				printErrorBanner()
 				os.Exit(1)
 			}
 		}
 	} else {
-		logPrintln("\nRustHound-CE completed successfully.")
+		fmt.Println("")
+		logPrintln("RustHound-CE completed successfully.")
 	}
 
 	// Run post-processing on the output files
-	logPrintln("\nPerforming post-processing on generated files...")
+	fmt.Println("")
+	logPrintln("Performing post-processing on generated files...")
 
 	summary, err := ProcessRustHoundOutput(outputDir, *debugMode)
 	if err != nil {
@@ -415,31 +428,36 @@ func main() {
 		}
 
 		// Display summary information
-		logPrintln("\nPost-processing results:")
+		fmt.Println("")
+		logPrintln("Post-processing results:")
 		logPrintf("- Total files processed: %d\n", summary.TotalFiles)
 		logPrintf("- Total size: %.2f MB\n", float64(summary.TotalBytes)/(1024*1024))
 		logPrintf("- Processing time: %s\n", summary.ProcessingTime)
 
-		logPrintln("\nSecurity findings:")
+		fmt.Println("")
+		logPrintln("Security findings:")
 		for _, finding := range summary.SecurityFindings {
 			logPrintf("- %s: %s\n", finding.Type, finding.Description)
 		}
 
 		// Print findings summary by category
 		categoryCounts := GetCategorySummary(summary.SecurityFindings)
-		logPrintln("\nFindings summary by category:")
+		fmt.Println("")
+		logPrintln("Findings summary by category:")
 		if len(categoryCounts) == 0 {
 			logPrintln("No security issues found.")
 		} else {
 			for category, count := range categoryCounts {
 				logPrintf("- %s: %d\n", category, count)
 			}
-			logPrintf("\nTotal security issues found: %d\n", len(summary.SecurityFindings))
+			fmt.Println("")
+			logPrintf("Total security issues found: %d\n", len(summary.SecurityFindings))
 		}
 
 		// Compress output files and clean up if enabled
 		if *compressOutput {
-			logPrintln("\nCompressing output files and cleaning up...")
+			fmt.Println("")
+			logPrintln("Compressing output files and cleaning up...")
 			err = CompressOutputAndCleanup(outputDir, *debugMode)
 			if err != nil {
 				hasErrors = true
@@ -449,7 +467,8 @@ func main() {
 	}
 
 	// List all files generated by RustHound-CE
-	logPrintln("\nFiles generated by rusthound-wrapper:")
+	fmt.Println("")
+	logPrintln("Files generated by rusthound-wrapper:")
 
 	fileCount := 0
 	totalBytes := int64(0)
@@ -477,7 +496,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	logPrintf("\nSummary: Generated %d files, total size %d bytes (%.2f MB)\n",
+	fmt.Println("")
+	logPrintf("Summary: Generated %d files, total size %d bytes (%.2f MB)\n",
 		fileCount, totalBytes, float64(totalBytes)/(1024*1024))
 
 	// Print success or error banner based on the result

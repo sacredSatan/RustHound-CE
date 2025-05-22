@@ -119,7 +119,8 @@ func checkAvailableMemory(maxMemoryUsageMB uint64) (bool, string) {
 
 // runPrerequisiteChecks runs all prerequisite checks and returns true if all mandatory checks pass
 func runPrerequisiteChecks(args []string, outputDir string, minDiskSpaceMB, maxMemoryUsageMB uint64) bool {
-	logPrintln("\nRunning prerequisite checks...")
+	fmt.Println("")
+	logPrintln("Running prerequisite checks...")
 
 	// Define all checks to run
 	checks := []PrerequisiteCheck{
@@ -146,13 +147,13 @@ func runPrerequisiteChecks(args []string, outputDir string, minDiskSpaceMB, maxM
 	// Run all checks
 	allChecksPassed := true
 	for _, check := range checks {
-		logPrintf("- %s: ", check.Name)
 		passed, message := check.Run()
 
 		if passed {
-			logPrintf("PASS - %s\n", message)
+			logPrintf("- %s: PASS - %s\n", check.Name, message)
 		} else {
-			logPrintf("FAIL - %s\n", message)
+			fmt.Println("")
+			logPrintf("- %s: FAIL - %s\n", check.Name, message)
 			if check.Fatal {
 				allChecksPassed = false
 			}
