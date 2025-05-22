@@ -151,47 +151,135 @@ func printHelp() {
 }
 
 // printSuccessBanner displays a banner for successful execution
-func printSuccessBanner() {
+func printSuccessBanner(execDir string) {
+	// Get list of important files
+	zipFile := ""
+	summaryFile := ""
+	logFileName := ""
+
+	// Find the ZIP, summary, and log files
+	files, err := os.ReadDir(execDir)
+	if err == nil {
+		for _, file := range files {
+			name := file.Name()
+			if strings.HasPrefix(name, "permiso_ad_scanner_results_") && strings.HasSuffix(name, ".zip") {
+				zipFile = name
+			} else if name == "summary.json" {
+				summaryFile = name
+			} else if strings.HasPrefix(name, "permiso_ad_scanner_") && strings.HasSuffix(name, ".log") {
+				logFileName = name
+			}
+		}
+	}
+
 	fmt.Println("")
 	fmt.Println("====================================================================")
-	fmt.Println("Permiso AD Scanner completed successfully!")
+	fmt.Println("Successfully finished permiso-ad-scanner")
 	fmt.Println("")
-	fmt.Println("All AD information has been collected and analyzed.")
-	fmt.Println("See the summary.json file and the zip archive for results.")
+	fmt.Println("Files generated:")
+	if zipFile != "" {
+		fmt.Printf("  - %s\n", zipFile)
+	}
+	if summaryFile != "" {
+		fmt.Printf("  - %s\n", summaryFile)
+	}
+	if logFileName != "" {
+		fmt.Printf("  - %s\n", logFileName)
+	}
+	fmt.Println("")
+	fmt.Println("Please send these files securely to Permiso support. This will be")
+	fmt.Println("sent to Permiso's threat research team and engineering team to build")
+	fmt.Println("detections and an Active Directory application that can run on a")
+	fmt.Println("full and regular basis.")
 	fmt.Println("=====================================================================")
 
 	// Also log to file if available
 	if logFile != nil {
-		fmt.Println("")
-		fmt.Fprintln(logFile, "====================================================================")
-		fmt.Fprintln(logFile, "Permiso AD Scanner completed successfully!")
 		fmt.Fprintln(logFile, "")
-		fmt.Fprintln(logFile, "All AD information has been collected and analyzed.")
-		fmt.Fprintln(logFile, "See the summary.json file and the zip archive for results.")
+		fmt.Fprintln(logFile, "====================================================================")
+		fmt.Fprintln(logFile, "Successfully finished permiso-ad-scanner")
+		fmt.Fprintln(logFile, "")
+		fmt.Fprintln(logFile, "Files generated:")
+		if zipFile != "" {
+			fmt.Fprintf(logFile, "  - %s\n", zipFile)
+		}
+		if summaryFile != "" {
+			fmt.Fprintf(logFile, "  - %s\n", summaryFile)
+		}
+		if logFileName != "" {
+			fmt.Fprintf(logFile, "  - %s\n", logFileName)
+		}
+		fmt.Fprintln(logFile, "")
+		fmt.Fprintln(logFile, "Please send the zip file securely to Permiso support. This will be")
+		fmt.Fprintln(logFile, "sent to Permiso's threat research team and engineering team to build")
+		fmt.Fprintln(logFile, "detections and an Active Directory application that can run on a")
+		fmt.Fprintln(logFile, "full and regular basis.")
 		fmt.Fprintln(logFile, "=====================================================================")
 	}
 }
 
 // printErrorBanner displays a banner for execution with errors
-func printErrorBanner() {
+func printErrorBanner(execDir string) {
+	// Get list of important files
+	zipFile := ""
+	summaryFile := ""
+	logFileName := ""
+
+	// Find the ZIP, summary, and log files
+	files, err := os.ReadDir(execDir)
+	if err == nil {
+		for _, file := range files {
+			name := file.Name()
+			if strings.HasPrefix(name, "permiso_ad_scanner_results_") && strings.HasSuffix(name, ".zip") {
+				zipFile = name
+			} else if name == "summary.json" {
+				summaryFile = name
+			} else if strings.HasPrefix(name, "permiso_ad_scanner_") && strings.HasSuffix(name, ".log") {
+				logFileName = name
+			}
+		}
+	}
+
 	fmt.Println("")
 	fmt.Println("====================================================================")
 	fmt.Println("Permiso AD Scanner completed with ERRORS!")
 	fmt.Println("")
-	fmt.Println("The scanning process encountered issues during execution.")
-	fmt.Println("Check the log file and error messages for more details.")
-	fmt.Println("Partial results may be available in the output directory.")
+	fmt.Println("Files generated:")
+	if zipFile != "" {
+		fmt.Printf("  - %s\n", zipFile)
+	}
+	if summaryFile != "" {
+		fmt.Printf("  - %s\n", summaryFile)
+	}
+	if logFileName != "" {
+		fmt.Printf("  - %s\n", logFileName)
+	}
+	fmt.Println("")
+	fmt.Println("Please send the zip file securely to Permiso support. The file contains")
+	fmt.Println("execution logs that will help our threat research and engineering")
+	fmt.Println("teams troubleshoot issues.")
 	fmt.Println("=====================================================================")
 
 	// Also log to file if available
 	if logFile != nil {
-		fmt.Println("")
+		fmt.Fprintln(logFile, "")
 		fmt.Fprintln(logFile, "====================================================================")
 		fmt.Fprintln(logFile, "Permiso AD Scanner completed with ERRORS!")
 		fmt.Fprintln(logFile, "")
-		fmt.Fprintln(logFile, "The scanning process encountered issues during execution.")
-		fmt.Fprintln(logFile, "Check the log file and error messages for more details.")
-		fmt.Fprintln(logFile, "Partial results may be available in the output directory.")
+		fmt.Fprintln(logFile, "Files generated:")
+		if zipFile != "" {
+			fmt.Fprintf(logFile, "  - %s\n", zipFile)
+		}
+		if summaryFile != "" {
+			fmt.Fprintf(logFile, "  - %s\n", summaryFile)
+		}
+		if logFileName != "" {
+			fmt.Fprintf(logFile, "  - %s\n", logFileName)
+		}
+		fmt.Fprintln(logFile, "")
+		fmt.Fprintln(logFile, "Even though errors were encountered, please send these files securely")
+		fmt.Fprintln(logFile, "to Permiso support. This will help our threat research and engineering")
+		fmt.Fprintln(logFile, "teams troubleshoot issues and improve the scanner for future use.")
 		fmt.Fprintln(logFile, "=====================================================================")
 	}
 }
@@ -383,7 +471,7 @@ func main() {
 		if !checksPassed {
 			fmt.Println("")
 			logErrorf("One or more prerequisite checks failed. Fix the issues or use --skip-checks to bypass.\n")
-			printErrorBanner()
+			printErrorBanner(execDir)
 			os.Exit(1)
 		}
 	}
@@ -400,7 +488,7 @@ func main() {
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		logErrorf("Error creating stderr pipe: %v\n", err)
-		printErrorBanner()
+		printErrorBanner(execDir)
 		os.Exit(1)
 	}
 
@@ -408,7 +496,7 @@ func main() {
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		logErrorf("Error creating stdout pipe: %v\n", err)
-		printErrorBanner()
+		printErrorBanner(execDir)
 		os.Exit(1)
 	}
 
@@ -434,7 +522,7 @@ func main() {
 	err = cmd.Start()
 	if err != nil {
 		logErrorf("Error starting RustHound-CE: %v\n", err)
-		printErrorBanner()
+		printErrorBanner(execDir)
 		os.Exit(1)
 	}
 
@@ -507,7 +595,7 @@ func main() {
 			if strings.Contains(err.Error(), "killed") {
 				fmt.Println("")
 				logErrorf("Process was terminated due to resource constraints, exiting wrapper\n")
-				printErrorBanner()
+				printErrorBanner(execDir)
 				os.Exit(1)
 			}
 		}
@@ -611,7 +699,7 @@ func main() {
 	if err != nil {
 		hasErrors = true
 		logErrorf("Error listing files: %v\n", err)
-		printErrorBanner()
+		printErrorBanner(execDir)
 		os.Exit(1)
 	}
 
@@ -622,8 +710,8 @@ func main() {
 
 	// Print success or error banner based on the result
 	if !hasErrors {
-		printSuccessBanner()
+		printSuccessBanner(execDir)
 	} else {
-		printErrorBanner()
+		printErrorBanner(execDir)
 	}
 }
